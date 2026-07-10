@@ -1,0 +1,16 @@
+# AI Assistant Guidelines & Project Rules
+
+## Tech Stack
+- Frontend: React
+- Architecture/State: Redux
+- Testing: Unit and widget testing
+
+## Code Style & Conventions
+- Maintain a clean, modular structure following the designated architecture patterns.
+- Prefer explicit types over inferred types where applicable.
+- Write self-documenting code with concise inline comments for complex logic.
+
+## Build and Test Commands
+- Development command: npm run dev
+- Test command: npm test
+- Code generation/Linting: 
