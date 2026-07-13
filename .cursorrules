@@ -13,4 +13,9 @@
 ## Build and Test Commands
 - Development command: npm run dev
 - Test command: npm test
-- Code generation/Linting: 
+- Code generation/Linting:
+
+## Project Automation & Verification Rules 
+1. **Always Plan Before Coding:** For any feature involving state changes or user inputs, the AI must explicitly output a 3-step execution plan in text format and wait for human confirmation before writing or modifying code. 
+2. **Never Write Forms Without Tests:** Any code modifying UI forms or processing user inputs must be accompanied by a companion `.test` file covering boundary cases (empty strings, malicious input characters, and maximum length limits). 
+3. **Async State Lockouts Required:** All submission actions interacting with simulated or real asynchronous backends must explicitly toggle an immutable loading state that disables the triggering UI interaction component to block duplicate execution paths.
