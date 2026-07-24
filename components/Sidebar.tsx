@@ -49,7 +49,7 @@ export default function Sidebar() {
   function applySuggestion() {
     if (!suggestion) return;
     if (suggestion.wallColor) setWallColor(suggestion.wallColor);
-    if (suggestion.floorMaterial) setFloorMaterial(suggestion.floorMaterial as any);
+    if (suggestion.floorMaterial) setFloorMaterial(suggestion.floorMaterial);
   }
 
   async function sendChat() {
