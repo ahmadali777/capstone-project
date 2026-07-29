@@ -22,6 +22,13 @@ how to swap in a live OpenAI/Claude call once you have a key.
 - Photo upload → mock "AI style suggestion" card → apply to room
 - Chat sidebar ("make it cozy" / "make it bright" / "make it dramatic")
   that updates wall color, floor material, and lighting live
+- Tool-enabled AI chat with a structured mood-analysis tool that renders
+  four tool states and a real score card component
+
+## Tool contract
+- Tool name: `sceneMoodAnalysis`
+- Input schema: `{ prompt: string, roomContext?: string }`
+- Return shape: `{ score: number, label: string, summary: string, recommendations: string[], sceneUpdate: { lightingMood?: 'cozy' | 'bright' | 'dramatic' | 'neutral', wallColor?: string, floorMaterial?: 'wood' | 'tile' | 'carpet' } }`
 
 ## Run it locally
 ```bash

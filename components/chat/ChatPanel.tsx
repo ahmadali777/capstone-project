@@ -2,91 +2,32 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowDown, Send, Square } from 'lucide-react';
+import { useChat } from '@ai-sdk/react';
+import { DefaultChatTransport, type UIMessage } from 'ai';
 import { cn } from '@/lib/utils';
 import type { SceneUpdate } from '@/lib/aiModelConfig';
+import type { SceneMoodAnalysisOutput } from '@/lib/tools/sceneMoodAnalysis';
+import ToolCard from '@/components/chat/ToolCard';
 
 export interface ChatPanelProps {
   onSceneUpdate?: (update: SceneUpdate) => void;
   className?: string;
 }
 
-export type ChatRole = 'user' | 'assistant';
-
-export interface ChatMessage {
-  id: string;
-  role: ChatRole;
-  content: string;
-  createdAt: number;
-}
-
 interface MessageBubbleProps {
-  message: ChatMessage;
+  message: UIMessage;
   isStreaming: boolean;
-}
-
-function parseSceneUpdateFromText(text: string): SceneUpdate | null {
-  if (!text || text.length === 0) return null;
-  const trimmed = text.trim();
-  const jsonMatch = trimmed.match(/\{[\s\S]*\}$/);
-  if (!jsonMatch) return null;
-  try {
-    const parsed = JSON.parse(jsonMatch[0]) as unknown;
-    const result: SceneUpdate = {};
-    if (parsed && typeof parsed === 'object') {
-      const obj = parsed as Record<string, unknown>;
-      if (typeof obj.lightingMood === 'string') {
-        const allowed: SceneUpdate['lightingMood'][] = ['cozy', 'bright', 'dramatic', 'neutral'];
-        if (allowed.includes(obj.lightingMood as typeof allowed[number])) {
-          result.lightingMood = obj.lightingMood as SceneUpdate['lightingMood'];
-        }
-      }
-      if (typeof obj.wallColor === 'string' && /^#[0-9a-fA-F]{6}$/.test(obj.wallColor)) {
-        result.wallColor = obj.wallColor;
-      }
-      if (typeof obj.floorMaterial === 'string') {
-        const allowed: SceneUpdate['floorMaterial'][] = ['wood', 'tile', 'carpet'];
-        if (allowed.includes(obj.floorMaterial as typeof allowed[number])) {
-          result.floorMaterial = obj.floorMaterial as SceneUpdate['floorMaterial'];
-        }
-      }
-    }
-    if (result.lightingMood || result.wallColor || result.floorMaterial) {
-      return result;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function stripTrailingJson(text: string): string {
-  if (!text) return '';
-  const lines = text.split('\n');
-  const trimmedLines: string[] = [];
-  for (const line of lines) {
-    const t = line.trim();
-    if (t.startsWith('{') && t.endsWith('}')) {
-      try {
-        JSON.parse(t);
-        break;
-      } catch {
-        trimmedLines.push(line);
-      }
-    } else {
-      trimmedLines.push(line);
-    }
-  }
-  return trimmedLines.join('\n').trimEnd();
-}
-
-function generateId(): string {
-  return `msg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const isUser = message.role === 'user';
-  const content = isUser ? message.content : stripTrailingJson(message.content);
-  const showThinkingDots = isStreaming && !isUser && content.length === 0;
+  const textContent = message.parts
+    .filter((part) => part.type === 'text')
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('');
+
+  const toolParts = message.parts.filter((part) => part.type === 'tool-sceneMoodAnalysis');
+  const showThinkingDots = isStreaming && !isUser && textContent.length === 0;
   const showCaret = isStreaming && !isUser && !showThinkingDots;
 
   return (
@@ -119,36 +60,54 @@ function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
             <span className="sr-only">Thinking</span>
           </div>
         ) : (
-          <p className="whitespace-pre-wrap break-words">
-            {content.length > 0 ? content : '\u00A0'}
+          <div className="space-y-2">
+            {textContent.length > 0 ? (
+              <p className="whitespace-pre-wrap break-words">{textContent}</p>
+            ) : (
+              <p className="text-neutral-500">&nbsp;</p>
+            )}
+            {toolParts.length > 0 && (
+              <div className="space-y-2">
+                {toolParts.map((part) => {
+                  if (part.type !== 'tool-sceneMoodAnalysis') return null;
+                  return (
+                    <ToolCard
+                      key={part.toolCallId}
+                      title="Mood analysis tool"
+                      state={part.state}
+                      input={part.input}
+                      output={part.output as SceneMoodAnalysisOutput | undefined}
+                      errorText={part.state === 'output-error' ? part.errorText : undefined}
+                    />
+                  );
+                })}
+              </div>
+            )}
             {showCaret && (
               <span
                 className="inline-block w-1.5 h-4 ml-0.5 bg-neutral-500 align-middle animate-pulse rounded-sm"
                 aria-hidden
               />
             )}
-          </p>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-interface WireMessage {
-  role: ChatRole;
-  content: string;
-}
-
 export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-
-  const abortRef = useRef<AbortController | null>(null);
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const isAtBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
-  const appliedIdsRef = useRef<Set<string>>(new Set());
+  const [input, setInput] = useState('');
+  const appliedToolIdsRef = useRef<Set<string>>(new Set());
+
+  const { messages, sendMessage, status, stop } = useChat({
+    transport: new DefaultChatTransport({ api: '/api/scene-chat' }),
+  });
+
+  const isLoading = status === 'streaming' || status === 'submitted';
 
   const checkAtBottom = useCallback(() => {
     const el = scrollViewportRef.current;
@@ -184,124 +143,30 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
         el.scrollTop = el.scrollHeight;
       }
     }
-    for (const msg of messages) {
-      if (msg.role !== 'assistant') continue;
-      if (isLoading && msg.id === messages[messages.length - 1]?.id) continue;
-      if (appliedIdsRef.current.has(msg.id)) continue;
-      const parsed = parseSceneUpdateFromText(msg.content);
-      if (parsed && onSceneUpdate) {
-        onSceneUpdate(parsed);
+  }, [messages]);
+
+  useEffect(() => {
+    for (const message of messages) {
+      if (message.role !== 'assistant') continue;
+      for (const part of message.parts) {
+        if (part.type !== 'tool-sceneMoodAnalysis') continue;
+        if (part.state !== 'output-available') continue;
+        if (appliedToolIdsRef.current.has(part.toolCallId)) continue;
+
+        const output = part.output as SceneMoodAnalysisOutput | undefined;
+        if (output?.sceneUpdate && onSceneUpdate) {
+          onSceneUpdate(output.sceneUpdate);
+        }
+        appliedToolIdsRef.current.add(part.toolCallId);
       }
-      appliedIdsRef.current.add(msg.id);
     }
-  }, [messages, isLoading, onSceneUpdate]);
-
-  const stop = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-  }, []);
-
-  async function sendMessage(userText: string) {
-    const trimmed = userText.trim();
-    if (!trimmed || isLoading) return;
-
-    const userMsg: ChatMessage = {
-      id: generateId(),
-      role: 'user',
-      content: trimmed,
-      createdAt: Date.now(),
-    };
-    const assistantMsgId = generateId();
-    const assistantMsg: ChatMessage = {
-      id: assistantMsgId,
-      role: 'assistant',
-      content: '',
-      createdAt: Date.now(),
-    };
-
-    const nextMessages: ChatMessage[] = [...messages, userMsg, assistantMsg];
-    setMessages(nextMessages);
-    setInput('');
-    setIsLoading(true);
-
-    const controller = new AbortController();
-    abortRef.current = controller;
-    isAtBottomRef.current = true;
-
-    const wireMessages: WireMessage[] = nextMessages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
-
-    try {
-      const res = await fetch('/api/scene-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: wireMessages }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`Request failed (${res.status}): ${text.slice(0, 120)}`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder('utf-8');
-      let buffer = '';
-
-      while (true) {
-        const chunk = await reader.read();
-        const { done, value } = chunk;
-        if (done) break;
-        const delta = decoder.decode(value, { stream: true });
-        buffer += delta;
-        setMessages((prev) => {
-          const idx = prev.findIndex((m) => m.id === assistantMsgId);
-          if (idx === -1) return prev;
-          const updated = prev.slice();
-          updated[idx] = { ...updated[idx], content: buffer };
-          return updated;
-        });
-      }
-
-      const finalContent = buffer + decoder.decode();
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === assistantMsgId);
-        if (idx === -1) return prev;
-        const updated = prev.slice();
-        updated[idx] = { ...updated[idx], content: finalContent };
-        return updated;
-      });
-    } catch (err) {
-      if (controller.signal.aborted) {
-        // Aborted intentionally: do not treat as error; partial message stays.
-      } else {
-        console.error('[ChatPanel] sendMessage error:', err);
-        const errorText = err instanceof Error ? err.message : 'Unknown error';
-        setMessages((prev) => {
-          const idx = prev.findIndex((m) => m.id === assistantMsgId);
-          if (idx === -1) return prev;
-          const updated = prev.slice();
-          const currentContent = updated[idx].content;
-          updated[idx] = {
-            ...updated[idx],
-            content: currentContent
-              ? `${currentContent}\n\n[Error: ${errorText}]`
-              : `[Error: ${errorText}]`,
-          };
-          return updated;
-        });
-      }
-    } finally {
-      setIsLoading(false);
-      abortRef.current = null;
-    }
-  }
+  }, [messages, onSceneUpdate]);
 
   function onFormSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    void sendMessage(input);
+    if (!input.trim() || isLoading) return;
+    void sendMessage({ text: input.trim() });
+    setInput('');
   }
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -310,14 +175,14 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
       if (isLoading) {
         stop();
       } else if (input.trim()) {
-        void sendMessage(input);
+        void sendMessage({ text: input.trim() });
+        setInput('');
       }
     }
   }
 
   const lastMessage = messages[messages.length - 1];
-  const isStreamingCurrent =
-    isLoading && lastMessage?.role === 'assistant';
+  const isStreamingCurrent = isLoading && lastMessage?.role === 'assistant';
 
   return (
     <div className={cn('w-full flex flex-col h-full min-h-0', className)}>
@@ -337,17 +202,17 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
                 </p>
               </div>
             )}
-            {messages.map((m) => {
-              const isLast = m.id === messages[messages.length - 1]?.id;
+            {messages.map((message) => {
+              const isLast = message.id === messages[messages.length - 1]?.id;
               return (
                 <MessageBubble
-                  key={m.id}
-                  message={m}
-                  isStreaming={isLoading && isLast && m.role === 'assistant'}
+                  key={message.id}
+                  message={message}
+                  isStreaming={isLoading && isLast && message.role === 'assistant'}
                 />
               );
             })}
-            {isStreamingCurrent && (lastMessage?.content ?? '').length > 0 && (
+            {isStreamingCurrent && (lastMessage?.parts ?? []).length > 0 && (
               <div className="h-2" aria-hidden />
             )}
           </div>
