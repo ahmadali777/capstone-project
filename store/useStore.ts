@@ -2,6 +2,14 @@ import { create } from 'zustand';
 import { defaultSettings, type SettingsState } from '../app/settings/settingsTypes';
 
 export type AssetType = 'sofa' | 'lamp' | 'plant' | 'table' | 'chair' | 'rug';
+export type RoomType = 'room' | 'living-room' | 'washroom' | 'kitchen';
+
+export interface RoomDimensions {
+  length: string;
+  width: string;
+  height: string;
+  unit: string;
+}
 
 export interface SceneObject {
   id: string;
@@ -31,6 +39,12 @@ interface StoreState {
   setWallColor: (color: string) => void;
   setFloorMaterial: (material: FloorMaterial) => void;
   setLightingMood: (mood: LightingMood) => void;
+
+  // Shared room context for AI responses
+  selectedRoom: RoomType;
+  setSelectedRoom: (room: RoomType) => void;
+  roomDimensions: RoomDimensions;
+  setRoomDimensions: (dimensions: Partial<RoomDimensions>) => void;
 
   // AI suggestion result from the uploaded photo
   suggestion: {
@@ -99,6 +113,22 @@ export const useStore = create<StoreState>((set) => ({
   setWallColor: (color) => set({ wallColor: color }),
   setFloorMaterial: (material) => set({ floorMaterial: material }),
   setLightingMood: (mood) => set({ lightingMood: mood }),
+
+  selectedRoom: 'room',
+  setSelectedRoom: (room) => set({ selectedRoom: room }),
+  roomDimensions: {
+    length: '',
+    width: '',
+    height: '',
+    unit: 'ft',
+  },
+  setRoomDimensions: (dimensions) =>
+    set((state) => ({
+      roomDimensions: {
+        ...state.roomDimensions,
+        ...dimensions,
+      },
+    })),
 
   suggestion: null,
   setSuggestion: (s) => set({ suggestion: s }),

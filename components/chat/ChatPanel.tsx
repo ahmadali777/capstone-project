@@ -5,12 +5,9 @@ import { ArrowDown, Send, Square } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, type UIMessage } from 'ai';
 import { cn } from '@/lib/utils';
-import type { SceneUpdate } from '@/lib/aiModelConfig';
-import type { SceneMoodAnalysisOutput } from '@/lib/tools/sceneMoodAnalysis';
-import ToolCard from '@/components/chat/ToolCard';
+import ChatErrorBanner, { type ChatErrorVariant } from '@/components/chat/ChatErrorBanner';
 
 export interface ChatPanelProps {
-  onSceneUpdate?: (update: SceneUpdate) => void;
   className?: string;
 }
 
@@ -19,14 +16,16 @@ interface MessageBubbleProps {
   isStreaming: boolean;
 }
 
-function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
-  const isUser = message.role === 'user';
-  const textContent = message.parts
+function getTextContent(message: UIMessage) {
+  return message.parts
     .filter((part) => part.type === 'text')
     .map((part) => (part.type === 'text' ? part.text : ''))
     .join('');
+}
 
-  const toolParts = message.parts.filter((part) => part.type === 'tool-sceneMoodAnalysis');
+function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
+  const isUser = message.role === 'user';
+  const textContent = getTextContent(message);
   const showThinkingDots = isStreaming && !isUser && textContent.length === 0;
   const showCaret = isStreaming && !isUser && !showThinkingDots;
 
@@ -41,19 +40,19 @@ function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
         )}
       >
         {showThinkingDots ? (
-          <div className="flex items-center gap-1 h-5 min-w-[3rem]">
+          <div className="flex h-5 min-w-[3rem] items-center gap-1">
             <span
-              className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500 animate-pulse"
+              className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-500 animate-pulse"
               style={{ animationDelay: '0ms' }}
               aria-hidden
             />
             <span
-              className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500 animate-pulse"
+              className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-500 animate-pulse"
               style={{ animationDelay: '150ms' }}
               aria-hidden
             />
             <span
-              className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-500 animate-pulse"
+              className="inline-block h-1.5 w-1.5 rounded-full bg-neutral-500 animate-pulse"
               style={{ animationDelay: '300ms' }}
               aria-hidden
             />
@@ -66,26 +65,9 @@ function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
             ) : (
               <p className="text-neutral-500">&nbsp;</p>
             )}
-            {toolParts.length > 0 && (
-              <div className="space-y-2">
-                {toolParts.map((part) => {
-                  if (part.type !== 'tool-sceneMoodAnalysis') return null;
-                  return (
-                    <ToolCard
-                      key={part.toolCallId}
-                      title="Mood analysis tool"
-                      state={part.state}
-                      input={part.input}
-                      output={part.output as SceneMoodAnalysisOutput | undefined}
-                      errorText={part.state === 'output-error' ? part.errorText : undefined}
-                    />
-                  );
-                })}
-              </div>
-            )}
             {showCaret && (
               <span
-                className="inline-block w-1.5 h-4 ml-0.5 bg-neutral-500 align-middle animate-pulse rounded-sm"
+                className="ml-0.5 inline-block h-4 w-1.5 rounded-sm bg-neutral-500 align-middle animate-pulse"
                 aria-hidden
               />
             )}
@@ -96,18 +78,62 @@ function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   );
 }
 
-export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) {
+export default function ChatPanel({ className }: ChatPanelProps) {
   const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const isAtBottomRef = useRef(true);
+  const slowTimerRef = useRef<number | null>(null);
   const [showJump, setShowJump] = useState(false);
   const [input, setInput] = useState('');
-  const appliedToolIdsRef = useRef<Set<string>>(new Set());
+  const [lastPrompt, setLastPrompt] = useState<string | null>(null);
+  const [errorBanner, setErrorBanner] = useState<ChatErrorVariant | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
 
-  const { messages, sendMessage, status, stop } = useChat({
+  const { messages, sendMessage, status, stop, error } = useChat({
     transport: new DefaultChatTransport({ api: '/api/scene-chat' }),
+    onError: (err) => {
+      if (!navigator.onLine) {
+        setIsOnline(false);
+        setErrorBanner('offline');
+        return;
+      }
+      const message = err?.message?.toLowerCase() ?? '';
+      if (message.includes('429') || message.includes('rate limit') || message.includes('rate-limit')) {
+        setErrorBanner('rate-limit');
+      } else {
+        setErrorBanner('network');
+      }
+    },
   });
 
   const isLoading = status === 'streaming' || status === 'submitted';
+
+  const clearSlowTimer = useCallback(() => {
+    if (slowTimerRef.current) {
+      window.clearTimeout(slowTimerRef.current);
+      slowTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setErrorBanner((current) => (current === 'offline' ? null : current));
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      clearSlowTimer();
+      if (isLoading) stop();
+      setErrorBanner('offline');
+    };
+
+    setIsOnline(navigator.onLine);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [clearSlowTimer, isLoading, stop]);
 
   const checkAtBottom = useCallback(() => {
     const el = scrollViewportRef.current;
@@ -146,26 +172,49 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
   }, [messages]);
 
   useEffect(() => {
-    for (const message of messages) {
-      if (message.role !== 'assistant') continue;
-      for (const part of message.parts) {
-        if (part.type !== 'tool-sceneMoodAnalysis') continue;
-        if (part.state !== 'output-available') continue;
-        if (appliedToolIdsRef.current.has(part.toolCallId)) continue;
-
-        const output = part.output as SceneMoodAnalysisOutput | undefined;
-        if (output?.sceneUpdate && onSceneUpdate) {
-          onSceneUpdate(output.sceneUpdate);
-        }
-        appliedToolIdsRef.current.add(part.toolCallId);
-      }
+    if (isLoading) {
+      clearSlowTimer();
+      slowTimerRef.current = window.setTimeout(() => {
+        setErrorBanner((current) => (current === 'midstream' ? current : 'slow'));
+      }, 6000);
+      return () => clearSlowTimer();
     }
-  }, [messages, onSceneUpdate]);
+
+    if (status === 'ready' && errorBanner !== 'midstream' && errorBanner !== 'offline') {
+      setErrorBanner(null);
+    }
+
+    clearSlowTimer();
+    return undefined;
+  }, [clearSlowTimer, errorBanner, isLoading, status]);
+
+  useEffect(() => {
+    if (!error) return;
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      setErrorBanner('offline');
+      return;
+    }
+    const message = error.message?.toLowerCase() ?? '';
+    if (message.includes('429') || message.includes('rate limit') || message.includes('rate-limit')) {
+      setErrorBanner('rate-limit');
+    } else {
+      setErrorBanner('network');
+    }
+  }, [error]);
 
   function onFormSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
-    void sendMessage({ text: input.trim() });
+    const nextPrompt = input.trim();
+    if (!nextPrompt || isLoading) return;
+    if (!navigator.onLine) {
+      setIsOnline(false);
+      setErrorBanner('offline');
+      return;
+    }
+    setLastPrompt(nextPrompt);
+    setErrorBanner(null);
+    void sendMessage({ text: nextPrompt });
     setInput('');
   }
 
@@ -173,19 +222,38 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (isLoading) {
+        setErrorBanner('midstream');
         stop();
       } else if (input.trim()) {
-        void sendMessage({ text: input.trim() });
+        if (!navigator.onLine) {
+          setIsOnline(false);
+          setErrorBanner('offline');
+          return;
+        }
+        const nextPrompt = input.trim();
+        setLastPrompt(nextPrompt);
+        setErrorBanner(null);
+        void sendMessage({ text: nextPrompt });
         setInput('');
       }
     }
+  }
+
+  function handleRetry() {
+    if (!lastPrompt || !navigator.onLine) {
+      setIsOnline(false);
+      setErrorBanner('offline');
+      return;
+    }
+    setErrorBanner(null);
+    void sendMessage({ text: lastPrompt });
   }
 
   const lastMessage = messages[messages.length - 1];
   const isStreamingCurrent = isLoading && lastMessage?.role === 'assistant';
 
   return (
-    <div className={cn('w-full flex flex-col h-full min-h-0', className)}>
+    <div className={cn('flex h-full min-h-0 w-full flex-col', className)}>
       <div className="relative flex-1 min-h-0">
         <div
           ref={scrollViewportRef}
@@ -196,9 +264,9 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
         >
           <div className="flex flex-col gap-2 py-1">
             {messages.length === 0 && (
-              <div className="text-center py-8 px-3">
+              <div className="px-3 py-8 text-center">
                 <p className="text-sm text-neutral-500">
-                  Try: &ldquo;make it cozy&rdquo; or &ldquo;dramatic mood&rdquo;
+                  Ask AI for suggestions to improve your room design.
                 </p>
               </div>
             )}
@@ -212,9 +280,7 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
                 />
               );
             })}
-            {isStreamingCurrent && (lastMessage?.parts ?? []).length > 0 && (
-              <div className="h-2" aria-hidden />
-            )}
+            {isStreamingCurrent && (lastMessage?.parts ?? []).length > 0 && <div className="h-2" aria-hidden />}
           </div>
         </div>
         <button
@@ -222,17 +288,27 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
           onClick={scrollToBottom}
           aria-label="Jump to latest message"
           className={cn(
-            'absolute bottom-2 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-white/90 backdrop-blur px-3 py-1 text-xs text-neutral-700 shadow-sm transition-opacity duration-200',
-            showJump ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
+            'absolute bottom-2 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full border border-neutral-200 bg-white/90 px-3 py-1 text-xs text-neutral-700 shadow-sm backdrop-blur transition-opacity duration-200',
+            showJump ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
           )}
         >
-          <ArrowDown className="w-3 h-3" aria-hidden />
+          <ArrowDown className="h-3 w-3" aria-hidden />
           Jump to latest
         </button>
       </div>
 
-      <form onSubmit={onFormSubmit} className="pt-3 shrink-0">
-        <div className="flex flex-col sm:flex-row gap-2">
+      <div className="shrink-0 pt-3">
+        {errorBanner && (
+          <div className="mb-2">
+            <ChatErrorBanner
+              variant={errorBanner}
+              countdown={errorBanner === 'rate-limit' ? 8 : undefined}
+              onRetry={errorBanner === 'network' || errorBanner === 'offline' ? handleRetry : undefined}
+              onCancel={errorBanner === 'midstream' || errorBanner === 'slow' ? stop : undefined}
+            />
+          </div>
+        )}
+        <form onSubmit={onFormSubmit} className="flex flex-col gap-2 sm:flex-row">
           <label htmlFor="scene-chat-input" className="sr-only">
             Chat message
           </label>
@@ -241,32 +317,35 @@ export default function ChatPanel({ onSceneUpdate, className }: ChatPanelProps) 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="e.g. make it cozy"
-            className="w-full flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 focus:border-neutral-400 disabled:opacity-60"
+            placeholder="e.g. ask AI for suggestions"
+            className="w-full flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 disabled:opacity-60"
             autoComplete="off"
           />
           {isLoading ? (
             <button
               type="button"
-              onClick={stop}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 transition-colors"
+              onClick={() => {
+                setErrorBanner('midstream');
+                stop();
+              }}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 sm:w-auto"
               aria-label="Stop generating response"
             >
-              <Square className="w-3.5 h-3.5 fill-current" aria-hidden />
+              <Square className="h-3.5 w-3.5 fill-current" aria-hidden />
               Stop
             </button>
           ) : (
             <button
               type="submit"
-              disabled={!input.trim()}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-900 active:bg-black disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-1 transition-colors"
+            disabled={!input.trim() || !isOnline}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-900 active:bg-black disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-1 sm:w-auto"
             >
-              <Send className="w-3.5 h-3.5" aria-hidden />
-              Send
+              <Send className="h-3.5 w-3.5" aria-hidden />
+              {isOnline ? 'Send' : 'Offline'}
             </button>
           )}
-        </div>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

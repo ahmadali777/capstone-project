@@ -1,22 +1,65 @@
 'use client';
 
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
-import Sidebar from '@/components/Sidebar';
+import { MessageSquareText, PanelsLeftBottom } from 'lucide-react';
+import ToolsPanel from '@/components/ToolsPanel';
+import ChatPanel from '@/components/chat/ChatPanel';
 
 // Three.js needs the browser, so load the Scene with SSR disabled
 const Scene = dynamic(() => import('@/components/Scene'), { ssr: false });
 
 export default function Home() {
+  const [showTools, setShowTools] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+
   return (
-    <main className="flex h-screen w-screen">
-      <div className="flex-1 relative">
-        <div className="absolute top-4 left-4 z-10 bg-white/80 backdrop-blur rounded px-3 py-2 text-sm">
-          <p className="font-semibold">SpatialStager AI</p>
-          <p className="text-neutral-500 text-xs">Drag to orbit · click an item to select and move it</p>
+    <main className="flex h-screen w-screen overflow-hidden bg-neutral-50">
+      <section className="relative flex flex-col border-r border-neutral-200 bg-white">
+        <button
+          type="button"
+          onClick={() => setShowTools((value) => !value)}
+          className="flex h-12 w-12 items-center justify-center border-b border-neutral-200 text-neutral-700 transition hover:bg-neutral-100"
+          aria-label="Toggle tools panel"
+        >
+          <PanelsLeftBottom className="h-5 w-5" />
+        </button>
+        {showTools && (
+          <div className="h-full w-80 max-w-full overflow-hidden border-r border-neutral-200 bg-white">
+            <ToolsPanel />
+          </div>
+        )}
+      </section>
+
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="relative h-full min-h-0">
+          <div className="absolute left-4 top-4 z-10 rounded bg-white/80 px-3 py-2 text-sm backdrop-blur">
+            <p className="font-semibold">SpatialStager AI</p>
+            <p className="text-xs text-neutral-500">Drag to orbit · click an item to select and move it</p>
+          </div>
+          <Scene />
         </div>
-        <Scene />
-      </div>
-      <Sidebar />
+      </section>
+
+      <section className="relative flex flex-col border-l border-neutral-200 bg-white">
+        <button
+          type="button"
+          onClick={() => setShowChat((value) => !value)}
+          className="flex h-12 w-12 items-center justify-center border-b border-neutral-200 text-neutral-700 transition hover:bg-neutral-100"
+          aria-label="Toggle chat panel"
+        >
+          <MessageSquareText className="h-5 w-5" />
+        </button>
+        {showChat && (
+          <div className="flex min-h-0 w-96 max-w-full flex-1 flex-col overflow-hidden border-l border-neutral-200 bg-white">
+            <div className="shrink-0 border-b border-neutral-200 p-4">
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden p-4">
+              <ChatPanel className="h-full" />
+            </div>
+          </div>
+        )}
+      </section>
     </main>
   );
 }
