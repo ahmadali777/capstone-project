@@ -14,7 +14,7 @@ function extractTextFromMessages(messages: UIMessage[]): string {
     .trim();
 }
 
-async function streamTextWithTokens(writer: { write: (message: unknown) => void }, text: string, delayMs = 30) {
+async function streamTextWithTokens(writer: { write: (message: any) => void }, text: string, delayMs = 30) {
   const trimmed = text.trim();
   if (!trimmed) return;
 
