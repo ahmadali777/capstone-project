@@ -321,29 +321,38 @@ export default function ChatPanel({ className }: ChatPanelProps) {
             className="w-full flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 disabled:opacity-60"
             autoComplete="off"
           />
-          {isLoading ? (
-            <button
-              type="button"
-              onClick={() => {
-                setErrorBanner('midstream');
-                stop();
-              }}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 active:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-1 sm:w-auto"
-              aria-label="Stop generating response"
-            >
+          <button
+            type={isLoading ? 'button' : 'submit'}
+            onClick={
+              isLoading
+                ? () => {
+                    setErrorBanner('midstream');
+                    stop();
+                  }
+                : undefined
+            }
+            disabled={!isLoading && (!input.trim() || !isOnline)}
+            aria-label={
+              isLoading ? 'Stop generating response' : isOnline ? 'Send message' : 'Send message (offline)'
+            }
+            aria-busy={isLoading}
+            className={cn(
+              'inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto',
+              isLoading
+                ? 'bg-red-600 hover:bg-red-700 active:bg-red-800 focus:ring-red-400'
+                : 'bg-neutral-800 hover:bg-neutral-900 active:bg-black focus:ring-neutral-500',
+            )}
+          >
+            {isLoading ? (
               <Square className="h-3.5 w-3.5 fill-current" aria-hidden />
-              Stop
-            </button>
-          ) : (
-            <button
-              type="submit"
-            disabled={!input.trim() || !isOnline}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-neutral-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-neutral-900 active:bg-black disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-1 sm:w-auto"
-            >
+            ) : (
               <Send className="h-3.5 w-3.5" aria-hidden />
-              {isOnline ? 'Send' : 'Offline'}
-            </button>
-          )}
+            )}
+            <span>{isLoading ? 'Stop' : isOnline ? 'Send' : 'Offline'}</span>
+          </button>
+          <span className="sr-only" role="status" aria-live="polite">
+            {isLoading ? 'Generating response. Activate the button to stop.' : ''}
+          </span>
         </form>
       </div>
     </div>
