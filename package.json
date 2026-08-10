@@ -33,6 +33,7 @@
     "tailwind-merge": "^3.6.0",
     "three": "0.165.0",
     "zod": "^3.25.76",
+    "zundo": "^2.3.0",
     "zustand": "4.5.4"
   },
   "devDependencies": {

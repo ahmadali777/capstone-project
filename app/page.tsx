@@ -1,17 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { MessageSquareText, PanelsLeftBottom } from 'lucide-react';
 import ToolsPanel from '@/components/ToolsPanel';
 import ChatPanel from '@/components/chat/ChatPanel';
+import { restoreDesignLocally, saveDesignLocally, useStore } from '@/store/useStore';
 
 // Three.js needs the browser, so load the Scene with SSR disabled
-const Scene = dynamic(() => import('@/components/Scene'), { ssr: false });
+const Scene = dynamic(() => import('@/components/Scene'), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse bg-neutral-100" aria-label="Loading 3D room preview" />,
+});
 
 export default function Home() {
   const [showTools, setShowTools] = useState(false);
   const [showChat, setShowChat] = useState(false);
+  const objects = useStore((s) => s.objects);
+  const roomDimensions = useStore((s) => s.roomDimensions);
+
+  useEffect(() => {
+    restoreDesignLocally();
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => saveDesignLocally(), 1000);
+    return () => clearTimeout(timer);
+  }, [objects, roomDimensions]);
 
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-neutral-50">
@@ -25,9 +40,16 @@ export default function Home() {
           <PanelsLeftBottom className="h-5 w-5" />
         </button>
         {showTools && (
-          <div className="h-full w-80 max-w-full overflow-hidden border-r border-neutral-200 bg-white">
-            <ToolsPanel />
-          </div>
+          <>
+            <div
+              className="fixed inset-0 z-20 bg-black/30 md:hidden"
+              onClick={() => setShowTools(false)}
+              aria-hidden="true"
+            />
+            <div className="flex-1 min-h-0 w-80 max-w-[85vw] overflow-hidden border-r border-neutral-200 bg-white max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:shadow-xl">
+              <ToolsPanel />
+            </div>
+          </>
         )}
       </section>
 
@@ -51,13 +73,20 @@ export default function Home() {
           <MessageSquareText className="h-5 w-5" />
         </button>
         {showChat && (
-          <div className="flex min-h-0 w-96 max-w-full flex-1 flex-col overflow-hidden border-l border-neutral-200 bg-white">
-            <div className="shrink-0 border-b border-neutral-200 p-4">
+          <>
+            <div
+              className="fixed inset-0 z-20 bg-black/30 md:hidden"
+              onClick={() => setShowChat(false)}
+              aria-hidden="true"
+            />
+            <div className="flex min-h-0 w-96 max-w-[85vw] flex-1 flex-col overflow-hidden border-l border-neutral-200 bg-white max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:shadow-xl">
+              <div className="shrink-0 border-b border-neutral-200 p-4">
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden p-4">
+                <ChatPanel className="h-full" />
+              </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-hidden p-4">
-              <ChatPanel className="h-full" />
-            </div>
-          </div>
+          </>
         )}
       </section>
     </main>
