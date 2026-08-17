@@ -30,7 +30,7 @@ export default function Home() {
 
   return (
     <main className="flex h-screen w-screen overflow-hidden bg-neutral-50">
-      <section className="relative flex flex-col border-r border-neutral-200 bg-white">
+      <nav className="relative flex flex-col border-r border-neutral-200 bg-white" aria-label="Tools">
         <button
           type="button"
           onClick={() => setShowTools((value) => !value)}
@@ -51,19 +51,19 @@ export default function Home() {
             </div>
           </>
         )}
-      </section>
+      </nav>
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="relative h-full min-h-0">
-          <div className="absolute left-4 top-4 z-10 rounded bg-white/80 px-3 py-2 text-sm backdrop-blur">
-            <p className="font-semibold">SpatialStager AI</p>
-            <p className="text-xs text-neutral-500">Drag to orbit · click an item to select and move it</p>
-          </div>
+          <header className="absolute left-4 top-4 z-10 rounded bg-white/80 px-3 py-2 text-sm backdrop-blur">
+            <h1 className="font-semibold text-base m-0 p-0">SpatialStager AI</h1>
+            <p className="text-xs text-neutral-600">Drag to orbit · click an item to select and move it</p>
+          </header>
           <Scene />
         </div>
       </section>
 
-      <section className="relative flex flex-col border-l border-neutral-200 bg-white">
+      <aside className="relative flex flex-col border-l border-neutral-200 bg-white" aria-label="Chat">
         <button
           type="button"
           onClick={() => setShowChat((value) => !value)}
@@ -88,7 +88,7 @@ export default function Home() {
             </div>
           </>
         )}
-      </section>
+      </aside>
     </main>
   );
 }
