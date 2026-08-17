@@ -4,18 +4,13 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { MessageSquareText, PanelsLeftBottom } from 'lucide-react';
 import ToolsPanel from '@/components/ToolsPanel';
+import ChatPanel from '@/components/chat/ChatPanel';
 import { restoreDesignLocally, saveDesignLocally, useStore } from '@/store/useStore';
 
 // Three.js needs the browser, so load the Scene with SSR disabled
 const Scene = dynamic(() => import('@/components/Scene'), {
   ssr: false,
   loading: () => <div className="h-full w-full animate-pulse bg-neutral-100" aria-label="Loading 3D room preview" />,
-});
-
-// ChatPanel pulls in @ai-sdk/react + ai SDK — defer until user opens the panel
-const ChatPanel = dynamic(() => import('@/components/chat/ChatPanel'), {
-  ssr: false,
-  loading: () => <div className="h-full w-full animate-pulse bg-neutral-100" aria-label="Loading chat" />,
 });
 
 export default function Home() {
@@ -25,11 +20,6 @@ export default function Home() {
   const roomDimensions = useStore((s) => s.roomDimensions);
 
   useEffect(() => {
-    // Defer localStorage restore off the critical path so it doesn't block TBT
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      const id = window.requestIdleCallback(() => restoreDesignLocally(), { timeout: 2000 });
-      return () => window.cancelIdleCallback(id);
-    }
     restoreDesignLocally();
   }, []);
 
