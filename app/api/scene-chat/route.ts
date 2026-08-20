@@ -1,12 +1,16 @@
 import { NextRequest } from 'next/server';
 import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from 'ai';
 import Groq from 'groq-sdk';
-import { SPATIALSTAGER_SYSTEM_PROMPT } from '@/lib/aiModelConfig';
+import { buildRoomAwareSystemPrompt } from '@/lib/aiModelConfig';
 
 const openRouterApiKey = process.env.OPENROUTER_API_KEY ?? process.env.GEMINI_API_KEY;
 const groqApiKey = process.env.GROQ_API_KEY;
 const OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 const GROQ_MODEL = 'openai/gpt-oss-120b';
+
+const MAX_PROMPT_LENGTH = 500;
+const MAX_MESSAGES_ARRAY_LENGTH = 10;
+const MAX_CONTENT_LENGTH = 10240;
 
 function extractTextFromMessages(messages: UIMessage[]): string {
   const latestUserMessage = [...messages].reverse().find((message) => message.role === 'user');
@@ -15,6 +19,10 @@ function extractTextFromMessages(messages: UIMessage[]): string {
     .map((part) => (part.type === 'text' ? part.text : ''))
     .join('')
     .trim();
+}
+
+function sanitizePrompt(raw: string): string {
+  return raw.replace(/\0/g, '').replace(/\s+/g, ' ').trim();
 }
 
 async function streamTextWithTokens(writer: { write: (message: any) => void }, text: string, delayMs = 30) {
@@ -47,12 +55,13 @@ function buildFallbackMessage(message: string) {
   return `The assistant could not reach the AI service: ${message.slice(0, 200)}`;
 }
 
-function buildChatStream(messages: UIMessage[]) {
+function buildChatStream(messages: UIMessage[], roomContext?: string) {
   const prompt = extractTextFromMessages(messages) || 'Design a calm and functional room';
+  const systemPrompt = buildRoomAwareSystemPrompt(roomContext);
   return createUIMessageStream({
     async execute({ writer }) {
       if (!openRouterApiKey && !groqApiKey) {
-        const fallback = 'I’m ready to help, but no AI key is configured yet. Add OPENROUTER_API_KEY or GROQ_API_KEY to .env.local and restart the server.';
+        const fallback = 'I\'m ready to help, but no AI key is configured yet. Add OPENROUTER_API_KEY or GROQ_API_KEY to .env.local and restart the server.';
         await streamTextWithTokens(writer, fallback);
         return;
       }
@@ -62,7 +71,7 @@ function buildChatStream(messages: UIMessage[]) {
           const groq = new Groq({ apiKey: groqApiKey });
           const stream = await groq.chat.completions.create({
             messages: [
-              { role: 'system', content: SPATIALSTAGER_SYSTEM_PROMPT },
+              { role: 'system', content: systemPrompt },
               { role: 'user', content: prompt },
             ],
             model: GROQ_MODEL,
@@ -95,7 +104,7 @@ function buildChatStream(messages: UIMessage[]) {
             model: OPENROUTER_MODEL,
             stream: true,
             messages: [
-              { role: 'system', content: SPATIALSTAGER_SYSTEM_PROMPT },
+              { role: 'system', content: systemPrompt },
               { role: 'user', content: prompt },
             ],
             max_tokens: 600,
@@ -153,15 +162,33 @@ function buildChatStream(messages: UIMessage[]) {
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
   try {
+    const contentLength = req.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_CONTENT_LENGTH) {
+      return new Response(JSON.stringify({ error: 'Request body too large' }), { status: 413, headers: { 'Content-Type': 'application/json' } });
+    }
+
     const body = await req.json();
     const messages = (body?.messages as UIMessage[] | undefined) ?? [];
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: 'No messages provided' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
-    return createUIMessageStreamResponse({ stream: buildChatStream(messages) });
+
+    if (messages.length > MAX_MESSAGES_ARRAY_LENGTH) {
+      return new Response(JSON.stringify({ error: 'Too many messages in request' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const prompt = sanitizePrompt(extractTextFromMessages(messages));
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      return new Response(JSON.stringify({ error: `Message too long (max ${MAX_PROMPT_LENGTH} characters)` }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    const roomContext = typeof body?.roomContext === 'string' ? body.roomContext : undefined;
+
+    return createUIMessageStreamResponse({ stream: buildChatStream(messages, roomContext) });
   } catch (error) {
     console.error('[scene-chat] POST error:', error);
     return new Response(JSON.stringify({ error: 'Failed to process request' }), { status: 500, headers: { 'Content-Type': 'application/json' } });

@@ -3,7 +3,7 @@
 import { AlertTriangle, Clock3, RefreshCw, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type ChatErrorVariant = 'offline' | 'network' | 'midstream' | 'rate-limit' | 'slow';
+export type ChatErrorVariant = 'offline' | 'network' | 'midstream' | 'rate-limit' | 'slow' | 'no-credits';
 
 interface ChatErrorBannerProps {
   variant: ChatErrorVariant;
@@ -34,6 +34,10 @@ const COPY: Record<ChatErrorVariant, { title: string; body: string }> = {
     title: 'Still thinking',
     body: 'The reply is taking longer than expected. You can cancel and try again.',
   },
+  'no-credits': {
+    title: 'Free messages used',
+    body: 'You\'ve used all 2 free messages for this session. Refresh the page to start a new session.',
+  },
 };
 
 export default function ChatErrorBanner({ variant, countdown, onRetry, onCancel, className }: ChatErrorBannerProps) {
@@ -56,6 +60,8 @@ export default function ChatErrorBanner({ variant, countdown, onRetry, onCancel,
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         ) : variant === 'rate-limit' ? (
           <Clock3 className="mt-0.5 h-4 w-4 shrink-0" />
+        ) : variant === 'no-credits' ? (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         ) : (
           <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
         )}

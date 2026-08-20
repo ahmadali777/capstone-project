@@ -10,6 +10,37 @@ vi.mock('@ai-sdk/react', () => ({
   useChat: useChatMock,
 }));
 
+vi.mock('@/store/useStore', () => ({
+  useStore: Object.assign(
+    vi.fn(() => ({
+      selectedRoom: 'living-room',
+      roomDimensions: { length: '6', width: '4.5', height: '3', unit: 'ft' },
+      wallColor: '#e8e1d5',
+      floorMaterial: 'wood',
+      lightingMood: 'neutral',
+      objects: [{ type: 'sofa' }, { type: 'table' }],
+    })),
+    {
+      getState: vi.fn(() => ({
+        selectedRoom: 'living-room',
+        roomDimensions: { length: '6', width: '4.5', height: '3', unit: 'ft' },
+        wallColor: '#e8e1d5',
+        floorMaterial: 'wood',
+        lightingMood: 'neutral',
+        objects: [{ type: 'sofa' }, { type: 'table' }],
+      })),
+    },
+  ),
+}));
+
+const mockGetRemainingMessages = vi.fn(() => 2);
+const mockDecrementMessages = vi.fn(() => 1);
+
+vi.mock('@/lib/chatRateLimit', () => ({
+  getRemainingMessages: (...args: unknown[]) => mockGetRemainingMessages(...args),
+  decrementMessages: (...args: unknown[]) => mockDecrementMessages(...args),
+}));
+
 type MockStatus = 'ready' | 'submitted' | 'streaming' | 'error';
 
 interface MockChat {
@@ -56,6 +87,8 @@ describe('ChatPanel', () => {
       configurable: true,
       get: () => true,
     });
+    mockGetRemainingMessages.mockReturnValue(2);
+    mockDecrementMessages.mockReturnValue(1);
   });
 
   afterEach(() => {
@@ -193,10 +226,59 @@ describe('ChatPanel', () => {
     window.dispatchEvent(new Event('offline'));
 
     await waitFor(() => {
-      expect(screen.getByText("You’re offline")).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     });
 
     await user.type(screen.getByRole('textbox', { name: 'Chat message' }), 'hello');
     expect(screen.getByText('Offline')).toBeInTheDocument();
+  });
+
+  it('displays the chat counter with remaining messages', () => {
+    createMockChat();
+
+    render(<ChatPanel />);
+
+    expect(screen.getByText('Chats remaining: 2 / 2')).toBeInTheDocument();
+  });
+
+  it('disables input and shows no-credits banner when remaining is 0', () => {
+    mockGetRemainingMessages.mockReturnValue(0);
+    createMockChat();
+
+    render(<ChatPanel />);
+
+    expect(screen.getByText('Chats remaining: 0 / 2')).toBeInTheDocument();
+    expect(screen.getByText('Free messages used')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Chat message' })).toBeDisabled();
+  });
+
+  it('blocks sending when no credits remain', async () => {
+    mockGetRemainingMessages.mockReturnValue(0);
+    const state = createMockChat();
+    const user = userEvent.setup();
+
+    render(<ChatPanel />);
+
+    const sendButton = screen.getByRole('button', { name: 'Send message' });
+    expect(sendButton).toBeDisabled();
+  });
+
+  it('enforces maxLength on the chat input', () => {
+    createMockChat();
+
+    render(<ChatPanel />);
+
+    const input = screen.getByRole('textbox', { name: 'Chat message' });
+    expect(input).toHaveAttribute('maxlength', '300');
+  });
+
+  it('shows amber warning when only 1 chat remains', () => {
+    mockGetRemainingMessages.mockReturnValue(1);
+    mockDecrementMessages.mockReturnValue(0);
+    createMockChat();
+
+    render(<ChatPanel />);
+
+    expect(screen.getByText('Chats remaining: 1 / 2')).toBeInTheDocument();
   });
 });

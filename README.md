@@ -1,78 +1,157 @@
 # SpatialStager AI
 
-Capstone project — FlyRank AI Frontend Internship.
+> AI-assisted 3D room staging for trying layouts, materials, and lighting before committing to a design.
 
-An interactive 3D room-staging app: drop furniture into a 3D room, upload a
-photo for an AI style suggestion, and chat to change the mood/lighting —
-instead of just regenerating a flat AI image.
+https://capstone-project-three-silk-20.vercel.app
 
-## Status: v1 (working, mock AI)
+**Repository:** [github.com/ahmadali777/capstone-project](https://github.com/ahmadali777/capstone-project)
 
-Everything runs and works out of the box with **no API key required** —
-the two AI endpoints (`/api/analyze-room`, `/api/scene-chat`) currently
-return smart mock responses so you can demo the full flow immediately.
-Each route file has a commented-out "REAL VERSION" block showing exactly
-how to swap in a live OpenAI/Claude call once you have a key.
+SpatialStager AI is a browser-based interior-design playground. Users can place and reposition furniture in a 3D room, adjust materials and lighting, upload a room photo for a quick style suggestion, and ask an AI design assistant for tailored advice. Designs remain in the browser and can be exported as JSON or a PNG image.
 
-## Features in this version
-- 3D room designer (orbit camera) built with React Three Fiber, with a styled starter layout so the scene is never empty
-- 6 floor furniture types (sofa, chair, table, lamp, plant, rug) plus wall-mounted doors, windows and vents — click a sidebar card to add one, click an object in the scene to select it, and drag to reposition (floor items move across the room, wall items slide along their wall)
-- Collision awareness: overlapping floor items glow red and raise a warning banner — you're warned, never blocked (rugs are exempt, since furniture sitting on a rug is normal)
-- Undo/redo for furniture layout via zundo, scoped so paint, lighting, room-size and settings changes never enter the undo history
-- Wall placement controls: snap each wall item to the back or left wall from the "Which wall" toggle, and drag it along the wall to position it; selected wall items get a light-blue highlight instead of a floor ring
-- Local-only persistence — no accounts, no backend: the Project panel stores the design in localStorage (autosaved ~1s after changes), downloads a PNG screenshot of the 3D canvas, and exports/imports the design as a `.json` file
-- Photo upload → mock "AI style suggestion" card → apply to room
-- Chat sidebar ("make it cozy" / "make it bright" / "make it dramatic")
-  that updates wall color, floor material, and lighting live
-- Tool-enabled AI chat with a structured mood-analysis tool that renders
-  four tool states and a real score card component
-- Material configurator: paint walls, swap floor finishes, change lighting, recolour furniture, change finish, rotate, and drag objects
-- Performance-minded delivery: the Three.js canvas is client-only/lazy-loaded, adapts DPR/shadows on capable devices, and uses a static SVG room preview for WebGL, low-power, or reduced-motion contexts. The bundled sofa GLB is ~206 KB.
+## Screenshots
 
-## Tool contract
-- Tool name: `sceneMoodAnalysis`
-- Input schema: `{ prompt: string, roomContext?: string }`
-- Return shape: `{ score: number, label: string, summary: string, recommendations: string[], sceneUpdate: { lightingMood?: 'cozy' | 'bright' | 'dramatic' | 'neutral', wallColor?: string, floorMaterial?: 'wood' | 'tile' | 'carpet' } }`
+The desktop and mobile views below were captured from the local application. Keeping the source images in the repository lets the README render on GitHub and gives reviewers an immediate view of the product.
 
-## Run it locally
+| 3D room designer | Responsive controls |
+| --- | --- |
+| ![SpatialStager AI 3D room designer](docs/screenshots/room-designer.png) | ![SpatialStager AI mobile controls](docs/screenshots/mobile-controls.png) |
+
+## What it does
+
+- Creates an interactive 3D room with orbit controls and a client-only Three.js canvas.
+- Adds, selects, rotates, recolours, and drags floor furniture (sofa, chair, table, lamp, plant, and rug).
+- Adds wall-mounted doors, windows, and vents, with placement on the back or left wall.
+- Highlights colliding floor furniture and shows a warning instead of blocking the layout; rugs are excluded from collision checks.
+- Adjusts wall colour, floor finish, lighting, room dimensions, and furniture finishes.
+- Supports undo/redo for layout changes.
+- Saves the current design to `localStorage`, exports/imports layout JSON, and downloads a PNG screenshot of the canvas.
+- Accepts a room photo and returns a demo style suggestion that can be applied to the scene.
+- Streams AI-powered interior-design advice through the chat panel when a Groq or OpenRouter key is configured.
+- Falls back to a static SVG room preview for WebGL-unavailable, low-power, or reduced-motion environments.
+
+## Tech stack
+
+| Area | Tools |
+| --- | --- |
+| App framework | Next.js 14 (App Router), React 18, TypeScript |
+| 3D scene | Three.js, React Three Fiber, React Three Drei |
+| Styling and UI | Tailwind CSS, Radix UI, Lucide |
+| State | Zustand with Zundo history |
+| AI chat | Groq SDK or OpenRouter, Vercel AI SDK streaming primitives |
+| Validation and forms | Zod, React Hook Form |
+| Testing | Vitest, Testing Library, Playwright |
+| Deployment target | Vercel |
+
+## Run locally
+
+### Prerequisites
+
+- Node.js 18.17 or newer (Node 20 LTS recommended)
+- npm
+- An optional Groq or OpenRouter API key for live chat
+
+### Setup
+
 ```bash
+git clone https://github.com/ahmadali777/capstone-project.git
+cd capstone-project
 npm install
+```
+
+Create `.env.local` in the project root. Configure at least one chat provider if you want live responses:
+
+```env
+GROQ_API_KEY=your_groq_key
+# Or use OpenRouter:
+# OPENROUTER_API_KEY=your_openrouter_key
+```
+
+Start the app:
+
+```bash
 npm run dev
 ```
-Open http://localhost:3000
 
-## Project structure
-```
-app/
-  page.tsx              # main page: 3D canvas + sidebar + autosave
-  layout.tsx
-  api/analyze-room/     # photo -> style suggestion endpoint
-  api/scene-chat/       # chat text -> scene preset endpoint
-components/
-  Scene.tsx             # room, lighting, camera (exposes canvas for export)
-  FurniturePiece.tsx     # renders + drags each object (floor + wall items)
-  SofaModel.tsx          # GLB sofa with a procedural fallback
-  ToolsPanel.tsx         # sidebar: project, space, paint, furniture, wall items
-  ExportControls.tsx     # project name, screenshot + design download/load
-  SceneFallback.tsx      # static SVG preview when WebGL is unavailable
-store/
-  useStore.ts            # Zustand store (+ zundo undo/redo, collisions, persistence)
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The room designer and mock photo-analysis flow work without an API key; the chat panel explains how to configure a key when neither provider is available.
+
+### Useful commands
+
+```bash
+npm run dev        # local development server
+npm run build      # production build check
+npm run start      # serve a completed production build
+npm test           # unit/component tests
+npm run test:e2e   # Playwright browser tests
 ```
 
-## Next steps to extend this
-1. Add a real OpenAI/Claude API key in `.env.local` (`OPENAI_API_KEY=...`)
-   and uncomment the "REAL VERSION" block in each API route.
-2. Swap the primitive-shape furniture in `FurniturePiece.tsx` for real
-   `.glb` models (e.g. from Poly Pizza) using `useGLTF` from
-   `@react-three/drei`.
-3. Add more wall sides (right/front), ceiling and window light sources,
-   and shareable layout URLs or cloud sync on top of the existing
-   export/import files.
+## Environment variables
 
-## FE-10 performance note
+| Variable | Required | Used by | Purpose |
+| --- | --- | --- | --- |
+| `GROQ_API_KEY` | No* | `/api/scene-chat` | Preferred provider for streamed design chat (`openai/gpt-oss-120b`). |
+| `OPENROUTER_API_KEY` | No* | `/api/scene-chat` | Alternative provider for streamed design chat (`openai/gpt-4o-mini`). |
+| `GEMINI_API_KEY` | No* | `/api/scene-chat` | Backward-compatible fallback alias for the OpenRouter key. |
+| `OPENAI_API_KEY` | No | commented example in `/api/analyze-room` | Only needed if the mock photo-analysis implementation is intentionally replaced with the documented OpenAI example. |
 
-The interactive scene keeps geometry intentionally small: one ~206 KB GLB sofa and procedural primitives for the rest. The canvas loads only in the browser; devices reporting low CPU capacity or reduced motion get the static fallback instead. On capable devices the DPR is capped at 1.75 and shadows use a 1024px map to protect frame time. Collision checks are a simple O(n²) distance pass (fine for a roomful of furniture), and `preserveDrawingBuffer` is enabled so the PNG screenshot export works. With more time, I would add meshopt compression to the GLB and shareable saved layouts.
+\* Configure either `GROQ_API_KEY` or `OPENROUTER_API_KEY` for live AI chat. Never prefix these variables with `NEXT_PUBLIC_`, commit `.env.local`, or expose API keys in the browser.
 
-## Deploy
-Push to GitHub, then import the repo at vercel.com — no config needed,
-Vercel auto-detects Next.js.
+## Architecture
+
+```text
+Browser
+├── app/page.tsx
+│   ├── ToolsPanel: room, material, object, import/export controls
+│   ├── Scene: lazy-loaded React Three Fiber room and furniture
+│   └── ChatPanel: streamed conversation UI
+├── Zustand store
+│   ├── scene state, collision checks, undo/redo
+│   └── localStorage autosave/restore
+└── Next.js route handlers
+    ├── POST /api/analyze-room → deterministic demo style suggestion
+    └── POST /api/scene-chat → Groq or OpenRouter → streamed response
+```
+
+The 3D scene is dynamically imported with server-side rendering disabled because WebGL requires the browser. Scene state is intentionally client-local: there are no accounts, databases, or server-side saved designs in this version. API keys are read only in the server route handler, so the browser never receives them.
+
+## Product and engineering decisions
+
+- **Interactive 3D instead of generated images:** staging objects in a scene lets users experiment with placement, collisions, materials, and lighting rather than receiving a single static output.
+- **Progressive enhancement for rendering:** the application preserves the core room experience with an SVG fallback when WebGL or motion-heavy rendering is unsuitable.
+- **Local-first saving:** `localStorage` and JSON import/export keep the first version simple, private, and usable without sign-in or backend infrastructure.
+- **Soft collision feedback:** a warning is more useful for exploratory staging than a hard placement restriction; designers can deliberately overlap items while experimenting.
+- **Provider fallback for chat:** the route prefers Groq when available and otherwise uses OpenRouter, reducing coupling to one AI service.
+- **Mock image analysis in v1:** photo analysis returns sample style suggestions, allowing a complete demo without requiring image-model credits. The route contains a documented OpenAI implementation path for a future live version.
+
+## Production deployment and API safety
+
+Deploy by importing the GitHub repository into Vercel. Add `GROQ_API_KEY` or `OPENROUTER_API_KEY` in **Project Settings → Environment Variables** for Production, Preview, and Development as appropriate, then redeploy. A custom domain can be connected from Vercel’s Domains settings.
+
+Before publishing publicly, complete this production checklist:
+
+- [ ] Add the Vercel production URL at the top of this README.
+- [ ] Set the required provider key in Vercel; confirm no keys appear in client-side bundles or Git history.
+- [ ] Add an IP-based rate limit to `/api/scene-chat` (for example, with Vercel KV/Upstash) and return `429` with a `Retry-After` header when exceeded.
+- [ ] Cap request size, number of messages, and message length before calling the provider.
+- [ ] Set a sensible `maxDuration` on the streaming route for the chosen Vercel plan.
+- [ ] Test the full flow in Chrome, Firefox, Safari, and mobile Safari.
+
+**Current limitation:** the chat handler caps provider output (`600` tokens) and only sends the latest user message, but it does. implement an application-level rate limit, input-size cap, or `maxDuration`.
+
+## How AI tools contributed
+
+AI tools were used as a development collaborator, not as an unattended code generator. They helped with:
+
+- breaking down the capstone scope into the 3D staging, persistence, chat, accessibility, and testable UI pieces;
+- drafting and refining React/TypeScript patterns for scene controls, Zustand state transitions, and streamed chat handling;
+- suggesting test cases and accessibility improvements, with the resulting work checked through Vitest and Playwright;
+- reviewing and improving documentation language, including this README.
+
+All project-specific implementation choices—such as the local-first design model, collision behaviour, WebGL fallback, API provider order, and final code integration—were reviewed and made by the project author. AI output was treated as a starting point and verified in the application.
+
+Built by:
+Muhammad Ahmad Ali
+https://ahmad-swe-portfolio.vercel.app
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).

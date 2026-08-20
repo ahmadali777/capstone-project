@@ -5,9 +5,22 @@ import { ArrowDown, Send, Square } from 'lucide-react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport, isDynamicToolUIPart, isToolUIPart, type UIMessage } from 'ai';
 import { cn } from '@/lib/utils';
+import { stripMarkdown } from '@/lib/stripMarkdown';
+import { getRemainingMessages, decrementMessages } from '@/lib/chatRateLimit';
+import { useStore } from '@/store/useStore';
 import ChatErrorBanner, { type ChatErrorVariant } from '@/components/chat/ChatErrorBanner';
 import ToolCard from '@/components/chat/ToolCard';
 import type { SceneMoodAnalysisOutput } from '@/lib/tools/sceneMoodAnalysis';
+
+const MAX_INPUT_LENGTH = 300;
+
+function getCurrentRoomContext(): string {
+  const { selectedRoom, roomDimensions, wallColor, floorMaterial, lightingMood, objects } = useStore.getState();
+  const furnitureList = objects.map((o) => o.type).join(', ');
+  return `Room: ${selectedRoom} (${roomDimensions.length}x${roomDimensions.width}x${roomDimensions.height} ${roomDimensions.unit}). ` +
+    `Wall: ${wallColor}. Floor: ${floorMaterial}. Lighting: ${lightingMood}. ` +
+    `Furniture: ${furnitureList || 'none'}.`;
+}
 
 export interface ChatPanelProps {
   className?: string;
@@ -25,6 +38,15 @@ function getTextContent(message: UIMessage) {
     .join('');
 }
 
+function DisplayText({ text, isUser }: { text: string; isUser: boolean }) {
+  const cleaned = isUser ? text : stripMarkdown(text);
+  return (
+    <p className="whitespace-pre-wrap break-words">
+      {cleaned}
+    </p>
+  );
+}
+
 function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const textContent = getTextContent(message);
@@ -38,9 +60,7 @@ function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
     switch (part.type) {
       case 'text':
         return textContent.length > 0 ? (
-          <p key={key} className="whitespace-pre-wrap break-words">
-            {part.text}
-          </p>
+          <DisplayText key={key} text={part.text} isUser={isUser} />
         ) : (
           <p key={key} className="text-neutral-500">
             &nbsp;
@@ -140,9 +160,13 @@ export default function ChatPanel({ className }: ChatPanelProps) {
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
   const [errorBanner, setErrorBanner] = useState<ChatErrorVariant | null>(null);
   const [isOnline, setIsOnline] = useState(true);
+  const [remainingChats, setRemainingChats] = useState(() => getRemainingMessages());
 
   const { messages, sendMessage, status, stop, error } = useChat({
-    transport: new DefaultChatTransport({ api: '/api/scene-chat' }),
+    transport: new DefaultChatTransport({
+      api: '/api/scene-chat',
+      body: { roomContext: getCurrentRoomContext() },
+    }),
     onError: (err) => {
       if (!navigator.onLine) {
         setIsOnline(false);
@@ -159,6 +183,7 @@ export default function ChatPanel({ className }: ChatPanelProps) {
   });
 
   const isLoading = status === 'streaming' || status === 'submitted';
+  const noCredits = remainingChats <= 0;
 
   const clearSlowTimer = useCallback(() => {
     if (slowTimerRef.current) {
@@ -259,7 +284,7 @@ export default function ChatPanel({ className }: ChatPanelProps) {
   function onFormSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const nextPrompt = input.trim();
-    if (!nextPrompt || isLoading) return;
+    if (!nextPrompt || isLoading || noCredits) return;
     if (!navigator.onLine) {
       setIsOnline(false);
       setErrorBanner('offline');
@@ -269,6 +294,7 @@ export default function ChatPanel({ className }: ChatPanelProps) {
     setErrorBanner(null);
     void sendMessage({ text: nextPrompt });
     setInput('');
+    setRemainingChats(decrementMessages());
   }
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -277,7 +303,7 @@ export default function ChatPanel({ className }: ChatPanelProps) {
       if (isLoading) {
         setErrorBanner('midstream');
         stop();
-      } else if (input.trim()) {
+      } else if (input.trim() && !noCredits) {
         if (!navigator.onLine) {
           setIsOnline(false);
           setErrorBanner('offline');
@@ -288,6 +314,7 @@ export default function ChatPanel({ className }: ChatPanelProps) {
         setErrorBanner(null);
         void sendMessage({ text: nextPrompt });
         setInput('');
+        setRemainingChats(decrementMessages());
       }
     }
   }
@@ -361,6 +388,25 @@ export default function ChatPanel({ className }: ChatPanelProps) {
             />
           </div>
         )}
+        {noCredits && !errorBanner && (
+          <div className="mb-2">
+            <ChatErrorBanner variant="no-credits" />
+          </div>
+        )}
+        <div className="mb-2 text-center">
+          <span
+            className={cn(
+              'inline-block rounded-full px-2.5 py-0.5 text-xs font-medium',
+              noCredits
+                ? 'bg-red-50 text-red-700'
+                : remainingChats === 1
+                  ? 'bg-amber-50 text-amber-700'
+                  : 'bg-neutral-100 text-neutral-600',
+            )}
+          >
+            Chats remaining: {remainingChats} / 2
+          </span>
+        </div>
         <form onSubmit={onFormSubmit} className="flex flex-col gap-2 sm:flex-row">
           <label htmlFor="scene-chat-input" className="sr-only">
             Chat message
@@ -370,7 +416,9 @@ export default function ChatPanel({ className }: ChatPanelProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onInputKeyDown}
-            placeholder="e.g. ask AI for suggestions"
+            placeholder={noCredits ? 'No chats remaining' : 'e.g. ask AI for suggestions'}
+            maxLength={MAX_INPUT_LENGTH}
+            disabled={noCredits}
             className="w-full flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-800 placeholder:text-neutral-400 focus:border-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-400 disabled:opacity-60"
             autoComplete="off"
           />
@@ -384,7 +432,7 @@ export default function ChatPanel({ className }: ChatPanelProps) {
                   }
                 : undefined
             }
-            disabled={!isLoading && (!input.trim() || !isOnline)}
+            disabled={!isLoading && (!input.trim() || !isOnline || noCredits)}
             aria-label={
               isLoading ? 'Stop generating response' : isOnline ? 'Send message' : 'Send message (offline)'
             }
