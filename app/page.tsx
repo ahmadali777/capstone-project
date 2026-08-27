@@ -14,7 +14,7 @@ const Scene = dynamic(() => import('@/components/Scene'), {
 });
 
 export default function Home() {
-  const [showTools, setShowTools] = useState(false);
+  const [showTools, setShowTools] = useState(true);
   const [showChat, setShowChat] = useState(false);
   const objects = useStore((s) => s.objects);
   const roomDimensions = useStore((s) => s.roomDimensions);
@@ -55,10 +55,10 @@ export default function Home() {
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="relative h-full min-h-0">
-          <header className="absolute left-4 top-4 z-10 rounded bg-white/80 px-3 py-2 text-sm backdrop-blur">
+          {/* <header className="absolute left-4 top-4 z-10 rounded bg-white/80 px-3 py-2 text-sm backdrop-blur">
             <h1 className="font-semibold text-base m-0 p-0">SpatialStager AI</h1>
             <p className="text-xs text-neutral-600">Drag to orbit · click an item to select and move it</p>
-          </header>
+          </header> */}
           <Scene />
         </div>
       </section>
@@ -80,8 +80,6 @@ export default function Home() {
               aria-hidden="true"
             />
             <div className="flex min-h-0 w-96 max-w-[85vw] flex-1 flex-col overflow-hidden border-l border-neutral-200 bg-white max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:shadow-xl">
-              <div className="shrink-0 border-b border-neutral-200 p-4">
-              </div>
               <div className="min-h-0 flex-1 overflow-hidden p-4">
                 <ChatPanel className="h-full" />
               </div>

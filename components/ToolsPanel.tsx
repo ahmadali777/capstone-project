@@ -1,16 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, PaintBucket, RotateCcw, Trash2, Undo2, Redo2, AlertTriangle, DoorOpen, AppWindow, Fan } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, PaintBucket, RotateCcw, Trash2, DoorOpen, AppWindow, Fan, Frame, CircleDot, Box, Clock, Monitor } from 'lucide-react';
 import {
   isWallItem,
+  isDecorativeItem,
   useStore,
-  useTemporalStore,
   type AssetType,
   type Surface,
+  type WallTexture,
   SURFACE_TO_MATERIAL,
 } from '@/store/useStore';
-import type { FloorMaterial, LightingMood, WallSide } from '@/store/useStore';
+import type { FloorMaterial, LightingMood } from '@/store/useStore';
 import ExportControls from './ExportControls';
 
 type RoomType = 'room' | 'living-room' | 'washroom' | 'kitchen';
@@ -32,6 +33,11 @@ const ROOM_CATALOG: RoomCatalog[] = [
       { type: 'lamp', label: 'Lamp', emoji: '💡' },
       { type: 'plant', label: 'Plant', emoji: '🪴' },
       { type: 'rug', label: 'Rug', emoji: '🟫' },
+      { type: 'bookshelf', label: 'Bookshelf', emoji: '📚' },
+      { type: 'tv-stand', label: 'TV Stand', emoji: '📺' },
+      { type: 'cabinet', label: 'Cabinet', emoji: '🗄️' },
+      { type: 'bed', label: 'Bed', emoji: '🛏️' },
+      { type: 'desk', label: 'Desk', emoji: '🖥️' },
     ],
   },
   {
@@ -44,6 +50,10 @@ const ROOM_CATALOG: RoomCatalog[] = [
       { type: 'lamp', label: 'Floor Lamp', emoji: '💡' },
       { type: 'plant', label: 'Indoor Plant', emoji: '🪴' },
       { type: 'rug', label: 'Area Rug', emoji: '🟫' },
+      { type: 'bookshelf', label: 'Bookshelf', emoji: '📚' },
+      { type: 'tv-stand', label: 'TV Stand', emoji: '📺' },
+      { type: 'cabinet', label: 'Side Cabinet', emoji: '🗄️' },
+      { type: 'desk', label: 'Writing Desk', emoji: '🖥️' },
     ],
   },
   {
@@ -56,6 +66,8 @@ const ROOM_CATALOG: RoomCatalog[] = [
       { type: 'plant', label: 'Small Plant', emoji: '🪴' },
       { type: 'rug', label: 'Bath Mat', emoji: '🧺' },
       { type: 'sofa', label: 'Bench', emoji: '🛋️' },
+      { type: 'cabinet', label: 'Storage Cabinet', emoji: '🗄️' },
+      { type: 'desk', label: 'Shelf Unit', emoji: '🖥️' },
     ],
   },
   {
@@ -68,6 +80,8 @@ const ROOM_CATALOG: RoomCatalog[] = [
       { type: 'plant', label: 'Herb Pot', emoji: '🪴' },
       { type: 'rug', label: 'Runner Rug', emoji: '🟫' },
       { type: 'sofa', label: 'Breakfast Bench', emoji: '🛋️' },
+      { type: 'cabinet', label: 'Kitchen Cabinet', emoji: '🗄️' },
+      { type: 'bookshelf', label: 'Pantry Shelf', emoji: '📚' },
     ],
   },
 ];
@@ -121,6 +135,11 @@ const WALL_CATALOG: { type: AssetType; label: string; Icon: typeof DoorOpen }[] 
   { type: 'door', label: 'Door', Icon: DoorOpen },
   { type: 'window', label: 'Window', Icon: AppWindow },
   { type: 'vent', label: 'Vent', Icon: Fan },
+  { type: 'painting', label: 'Painting', Icon: Frame },
+  { type: 'mirror', label: 'Mirror', Icon: CircleDot },
+  { type: 'wall-shelf', label: 'Shelf', Icon: Box },
+  { type: 'clock', label: 'Clock', Icon: Clock },
+  { type: 'tv-mount', label: 'Wall TV', Icon: Monitor },
 ];
 
 function Swatch({
@@ -164,16 +183,27 @@ export default function ToolsPanel() {
     setFloorMaterial,
     lightingMood,
     setLightingMood,
+    wallTexture,
+    setWallTexture,
+    ceilingVisible,
+    setCeilingVisible,
+    ceilingColor,
+    setCeilingColor,
+    windowCoverings,
+    setWindowCoverings,
     objects,
-    overlappingIds,
     setObjectColor,
     setObjectSurface,
     rotateObject,
     setWallSide,
     resetLayout,
+    selectedWall,
+    setSelectedWall,
   } = useStore();
-  const { undo, redo, pastStates, futureStates } = useTemporalStore();
   const [unit, setUnit] = useState(roomDimensions.unit);
+  const [openSections, setOpenSections] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: true, 3: true });
+
+  const toggleSection = (idx: number) => setOpenSections((prev) => ({ ...prev, [idx]: !prev[idx] }));
 
   const activeCatalog = useMemo(
     () => ROOM_CATALOG.find((room) => room.id === selectedRoom) ?? ROOM_CATALOG[0],
@@ -187,199 +217,282 @@ export default function ToolsPanel() {
           (s) => SURFACE_TO_MATERIAL[s.id].metalness === selected.metalness && SURFACE_TO_MATERIAL[s.id].roughness === selected.roughness,
         )?.id ?? 'satin');
 
+  function AccordionHeader({ idx, title }: { idx: number; title: string }) {
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSection(idx)}
+        className="flex w-full items-center justify-between border-b border-neutral-200 p-4 text-left"
+      >
+        <h2 className="font-semibold text-neutral-800">{title}</h2>
+        <ChevronDown
+          className={`h-4 w-4 text-neutral-500 transition-transform duration-200 ${openSections[idx] ? 'rotate-180' : ''}`}
+        />
+      </button>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
       <div className="flex-1 overflow-y-auto">
         <ExportControls />
+
         {/* 1. Space */}
-        <div className="border-b border-neutral-200 p-4">
-          <h2 className="mb-2 font-semibold text-neutral-800">1. Space</h2>
-          <select
-            value={selectedRoom}
-            onChange={(event) => setSelectedRoom(event.target.value as RoomType)}
-            className="w-full rounded border border-neutral-300 px-3 py-2 text-sm"
-          >
-            {ROOM_CATALOG.map((room) => (
-              <option key={room.id} value={room.id}>
-                {room.label}
-              </option>
-            ))}
-          </select>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            <label className="block text-xs text-neutral-500">
-              Length
-              <input
-                type="number"
-                min="1"
-                value={roomDimensions.length}
-                onChange={(event) => setRoomDimensions({ length: event.target.value })}
-                className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="block text-xs text-neutral-500">
-              Width
-              <input
-                type="number"
-                min="1"
-                value={roomDimensions.width}
-                onChange={(event) => setRoomDimensions({ width: event.target.value })}
-                className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="block text-xs text-neutral-500">
-              Height
-              <input
-                type="number"
-                min="1"
-                value={roomDimensions.height}
-                onChange={(event) => setRoomDimensions({ height: event.target.value })}
-                className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
-              />
-            </label>
+        <AccordionHeader idx={0} title="1. Space" />
+        {openSections[0] && (
+          <div className="border-b border-neutral-200 p-4">
+            <select
+              value={selectedRoom}
+              onChange={(event) => setSelectedRoom(event.target.value as RoomType)}
+              className="w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+            >
+              {ROOM_CATALOG.map((room) => (
+                <option key={room.id} value={room.id}>
+                  {room.label}
+                </option>
+              ))}
+            </select>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <label className="block text-xs text-neutral-500">
+                Length
+                <input
+                  type="number"
+                  min="1"
+                  value={roomDimensions.length}
+                  onChange={(event) => setRoomDimensions({ length: event.target.value })}
+                  className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="block text-xs text-neutral-500">
+                Width
+                <input
+                  type="number"
+                  min="1"
+                  value={roomDimensions.width}
+                  onChange={(event) => setRoomDimensions({ width: event.target.value })}
+                  className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="block text-xs text-neutral-500">
+                Height
+                <input
+                  type="number"
+                  min="1"
+                  value={roomDimensions.height}
+                  onChange={(event) => setRoomDimensions({ height: event.target.value })}
+                  className="mt-1 w-full rounded border border-neutral-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+            </div>
+            <select
+              value={unit}
+              onChange={(event) => {
+                setUnit(event.target.value);
+                setRoomDimensions({ unit: event.target.value });
+              }}
+              className="mt-2 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+            >
+              {UNIT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </div>
-          <select
-            value={unit}
-            onChange={(event) => setUnit(event.target.value)}
-            className="mt-2 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
-          >
-            {UNIT_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
+        )}
 
         {/* 2. Paint, floor, lighting */}
-        <div className="border-b border-neutral-200 p-4">
-          <h2 className="mb-2 font-semibold text-neutral-800">2. Paint &amp; finishes</h2>
-          <p className="mb-2 flex items-center gap-1 text-xs text-neutral-500">
-            <PaintBucket className="h-3.5 w-3.5" /> Wall paint
-          </p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {WALL_PAINTS.map((paint) => (
-              <Swatch
-                key={paint.value}
-                color={paint.value}
-                label={paint.name}
-                selected={wallColor === paint.value}
-                onClick={() => setWallColor(paint.value)}
+        <AccordionHeader idx={1} title="2. Paint & finishes" />
+        {openSections[1] && (
+          <div className="border-b border-neutral-200 p-4">
+            <p className="mb-2 flex items-center gap-1 text-xs text-neutral-500">
+              <PaintBucket className="h-3.5 w-3.5" /> Wall paint
+              {selectedWall && <span className="ml-1 text-blue-600 font-medium">({selectedWall} wall)</span>}
+            </p>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {WALL_PAINTS.map((paint) => (
+                <Swatch
+                  key={paint.value}
+                  color={paint.value}
+                  label={paint.name}
+                  selected={wallColor === paint.value}
+                  onClick={() => setWallColor(paint.value)}
+                />
+              ))}
+            </div>
+            <p className="mb-2 text-xs text-neutral-500">Floor</p>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {FLOOR_OPTIONS.map((floor) => (
+                <button
+                  key={floor.id}
+                  type="button"
+                  onClick={() => setFloorMaterial(floor.id)}
+                  className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    floorMaterial === floor.id
+                      ? 'border-neutral-800 bg-neutral-800 text-white'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100'
+                  }`}
+                >
+                  <span className="h-3 w-3 rounded-full" style={{ backgroundColor: floor.swatch }} />
+                  {floor.label}
+                </button>
+              ))}
+            </div>
+            <p className="mb-2 text-xs text-neutral-500">Lighting</p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {MOOD_OPTIONS.map((mood) => (
+                <button
+                  key={mood.id}
+                  type="button"
+                  onClick={() => setLightingMood(mood.id)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    lightingMood === mood.id
+                      ? 'border-neutral-800 bg-neutral-800 text-white'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100'
+                  }`}
+                >
+                  {mood.label}
+                </button>
+              ))}
+            </div>
+            <p className="mb-2 text-xs text-neutral-500">Wall texture</p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {(['none', 'brick', 'wood-panel', 'wallpaper', 'tile'] as WallTexture[]).map((tex) => (
+                <button
+                  key={tex}
+                  type="button"
+                  onClick={() => setWallTexture(tex)}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium capitalize transition ${
+                    wallTexture === tex
+                      ? 'border-neutral-800 bg-neutral-800 text-white'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100'
+                  }`}
+                >
+                  {tex === 'none' ? 'None' : tex.replace('-', ' ')}
+                </button>
+              ))}
+            </div>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-neutral-600">
+                <input
+                  type="checkbox"
+                  checked={ceilingVisible}
+                  onChange={(e) => setCeilingVisible(e.target.checked)}
+                  className="h-4 w-4 rounded border-neutral-300"
+                />
+                Show ceiling
+              </label>
+              {ceilingVisible && (
+                <Swatch color={ceilingColor} label="Ceiling" selected onClick={() => {}} />
+              )}
+            </div>
+            {ceilingVisible && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {['#f5f5f5', '#f0ebe0', '#e8e1d5', '#d4cfc5', '#ffffff'].map((c) => (
+                  <Swatch
+                    key={c}
+                    color={c}
+                    label={c}
+                    selected={ceilingColor === c}
+                    onClick={() => setCeilingColor(c)}
+                  />
+                ))}
+              </div>
+            )}
+            <label className="flex items-center gap-2 text-xs text-neutral-600">
+              <input
+                type="checkbox"
+                checked={windowCoverings}
+                onChange={(e) => setWindowCoverings(e.target.checked)}
+                className="h-4 w-4 rounded border-neutral-300"
               />
-            ))}
+              Window curtains
+            </label>
           </div>
-          <p className="mb-2 text-xs text-neutral-500">Floor</p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {FLOOR_OPTIONS.map((floor) => (
-              <button
-                key={floor.id}
-                type="button"
-                onClick={() => setFloorMaterial(floor.id)}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  floorMaterial === floor.id
-                    ? 'border-neutral-800 bg-neutral-800 text-white'
-                    : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100'
-                }`}
-              >
-                <span className="h-3 w-3 rounded-full" style={{ backgroundColor: floor.swatch }} />
-                {floor.label}
-              </button>
-            ))}
-          </div>
-          <p className="mb-2 text-xs text-neutral-500">Lighting</p>
-          <div className="flex flex-wrap gap-2">
-            {MOOD_OPTIONS.map((mood) => (
-              <button
-                key={mood.id}
-                type="button"
-                onClick={() => setLightingMood(mood.id)}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                  lightingMood === mood.id
-                    ? 'border-neutral-800 bg-neutral-800 text-white'
-                    : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100'
-                }`}
-              >
-                {mood.label}
-              </button>
-            ))}
-          </div>
-        </div>
+        )}
 
         {/* 3. Furniture */}
-        <div className="border-b border-neutral-200 p-4">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-neutral-800">3. Furniture</h2>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => undo()}
-                disabled={pastStates.length === 0}
-                className="flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900 disabled:opacity-30"
-              >
-                <Undo2 className="h-3.5 w-3.5" /> Undo
-              </button>
-              <button
-                type="button"
-                onClick={() => redo()}
-                disabled={futureStates.length === 0}
-                className="flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900 disabled:opacity-30"
-              >
-                <Redo2 className="h-3.5 w-3.5" /> Redo
-              </button>
+        <AccordionHeader idx={2} title="3. Furniture" />
+        {openSections[2] && (
+          <div className="border-b border-neutral-200 p-4">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-xs text-neutral-500">
+                Tap to add. Tap in scene to select.
+              </p>
               <button type="button" onClick={resetLayout} className="flex items-center gap-1 text-xs text-neutral-600 hover:text-neutral-900">
-                <RotateCcw className="h-3.5 w-3.5" /> Reset layout
+                <RotateCcw className="h-3.5 w-3.5" /> Reset
               </button>
             </div>
-          </div>
-          <p className="mb-3 text-xs text-neutral-500">
-            Tap an item to add it to the {activeCatalog.label.toLowerCase()}. Tap it in the scene to select it.
-          </p>
-          {overlappingIds.length > 0 && (
-            <div className="mb-3 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-              {overlappingIds.length} item{overlappingIds.length > 1 ? 's are' : ' is'} overlapping — drag to adjust.
+            <div className="grid grid-cols-3 gap-2">
+              {activeCatalog.items.map((asset) => (
+                <button
+                  key={asset.type + asset.label}
+                  type="button"
+                  onClick={() => addObject(asset.type)}
+                  className="flex flex-col items-center gap-1 rounded border border-neutral-200 p-2 text-xs hover:bg-neutral-50"
+                >
+                  <span className="text-xl">{asset.emoji}</span>
+                  {asset.label}
+                </button>
+              ))}
             </div>
-          )}
-          <div className="grid grid-cols-3 gap-2">
-            {activeCatalog.items.map((asset) => (
-              <button
-                key={asset.type + asset.label}
-                type="button"
-                onClick={() => addObject(asset.type)}
-                className="flex flex-col items-center gap-1 rounded border border-neutral-200 p-2 text-xs hover:bg-neutral-50"
-              >
-                <span className="text-xl">{asset.emoji}</span>
-                {asset.label}
-              </button>
-            ))}
           </div>
-        </div>
+        )}
 
-        {/* 4. Doors, windows & vents */}
-        <div className="border-b border-neutral-200 p-4">
-          <h2 className="mb-2 font-semibold text-neutral-800">4. Doors, windows &amp; vents</h2>
-          <p className="mb-3 text-xs text-neutral-500">
-            Wall items snap to a wall. Drag one along the wall to position it, or pick which wall below.
-          </p>
-          <div className="grid grid-cols-3 gap-2">
-            {WALL_CATALOG.map((item) => (
-              <button
-                key={item.type}
-                type="button"
-                onClick={() => addObject(item.type)}
-                className="flex flex-col items-center gap-1 rounded border border-neutral-200 p-2 text-xs hover:bg-neutral-50"
-              >
-                <item.Icon className="h-5 w-5" />
-                {item.label}
-              </button>
-            ))}
+        {/* 4. Wall items */}
+        <AccordionHeader idx={3} title="4. Wall items" />
+        {openSections[3] && (
+          <div className="border-b border-neutral-200 p-4">
+            {!selectedWall && (
+              <p className="mb-2 text-xs text-amber-600 font-medium">
+                Click a wall in the 3D scene to select it — items are placed on the selected wall.
+              </p>
+            )}
+            {selectedWall && (
+              <p className="mb-2 text-xs text-blue-600 font-medium">Selected wall: {selectedWall}. Tap an item to place it on this wall.</p>
+            )}
+            <p className="mb-2 text-xs text-neutral-500">
+              Structural — snaps to the selected wall. Use arrow keys to move along it.
+            </p>
+            <div className="mb-3 grid grid-cols-3 gap-2">
+              {WALL_CATALOG.filter((i) => ['door', 'window', 'vent'].includes(i.type)).map((item) => (
+                <button
+                  key={item.type}
+                  type="button"
+                  onClick={() => addObject(item.type)}
+                  disabled={!selectedWall}
+                  className="flex flex-col items-center gap-1 rounded border border-neutral-200 p-2 text-xs hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <item.Icon className="h-5 w-5" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <p className="mb-2 text-xs text-neutral-500">
+              Decorative — placed on the selected wall. Use arrow keys to move.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {WALL_CATALOG.filter((i) => !['door', 'window', 'vent'].includes(i.type)).map((item) => (
+                <button
+                  key={item.type}
+                  type="button"
+                  onClick={() => addObject(item.type)}
+                  disabled={!selectedWall}
+                  className="flex flex-col items-center gap-1 rounded border border-neutral-200 p-2 text-xs hover:bg-neutral-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <item.Icon className="h-5 w-5" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 5. Selected piece configurator */}
         {selected && (
           <div className="border-b border-neutral-200 bg-neutral-50 p-4">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="font-semibold text-neutral-800">5. Selected piece</h2>
+              <h2 className="font-semibold text-neutral-800">Selected piece</h2>
               <button
                 type="button"
                 onClick={() => removeObject(selected.id)}
@@ -417,27 +530,12 @@ export default function ToolsPanel() {
                 </button>
               ))}
             </div>
-            {isWallItem(selected.type) ? (
+            {isWallItem(selected.type) && !isDecorativeItem(selected.type) ? (
               <>
-                <p className="mb-2 text-xs text-neutral-500">Which wall</p>
-                <div className="flex gap-2">
-                  {(['back', 'left'] as WallSide[]).map((side) => (
-                    <button
-                      key={side}
-                      type="button"
-                      onClick={() => setWallSide(selected.id, side)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
-                        (selected.wall ?? 'back') === side
-                          ? 'border-neutral-800 bg-neutral-800 text-white'
-                          : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100'
-                      }`}
-                    >
-                      {side === 'back' ? 'Back' : 'Left'}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-3 text-xs text-neutral-500">Tip: drag the piece along the wall to reposition it.</p>
+                <p className="mt-1 text-xs text-neutral-500">Tip: use arrow keys to move along the wall.</p>
               </>
+            ) : isDecorativeItem(selected.type) ? (
+              <p className="mt-1 text-xs text-neutral-500">Placed on the {selected.wall ?? 'back'} wall. Use arrow keys to move along the wall.</p>
             ) : (
               <>
                 <p className="mb-2 text-xs text-neutral-500">Rotate</p>
@@ -457,7 +555,7 @@ export default function ToolsPanel() {
                     Right <ChevronRight className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                <p className="mt-3 text-xs text-neutral-500">Tip: drag the piece across the floor to reposition it.</p>
+                <p className="mt-3 text-xs text-neutral-500">Tip: use arrow keys to move across the floor.</p>
               </>
             )}
           </div>

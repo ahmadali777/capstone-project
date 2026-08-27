@@ -37,8 +37,8 @@ const mockGetRemainingMessages = vi.fn(() => 2);
 const mockDecrementMessages = vi.fn(() => 1);
 
 vi.mock('@/lib/chatRateLimit', () => ({
-  getRemainingMessages: (...args: unknown[]) => mockGetRemainingMessages(...args),
-  decrementMessages: (...args: unknown[]) => mockDecrementMessages(...args),
+  getRemainingMessages: () => mockGetRemainingMessages(),
+  decrementMessages: () => mockDecrementMessages(),
 }));
 
 type MockStatus = 'ready' | 'submitted' | 'streaming' | 'error';

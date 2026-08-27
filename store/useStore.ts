@@ -3,9 +3,14 @@ import { useStore as useZustandStore } from 'zustand';
 import { temporal } from 'zundo';
 import { defaultSettings, type SettingsState } from '../app/settings/settingsTypes';
 
-export type AssetType = 'sofa' | 'lamp' | 'plant' | 'table' | 'chair' | 'rug' | 'door' | 'window' | 'vent';
+export type AssetType =
+  | 'sofa' | 'lamp' | 'plant' | 'table' | 'chair' | 'rug'
+  | 'bookshelf' | 'tv-stand' | 'cabinet' | 'bed' | 'desk'
+  | 'door' | 'window' | 'vent'
+  | 'painting' | 'mirror' | 'wall-shelf' | 'clock' | 'tv-mount';
 export type RoomType = 'room' | 'living-room' | 'washroom' | 'kitchen';
-export type WallSide = 'back' | 'left';
+export type WallSide = 'back' | 'left' | 'right' | 'front';
+export type WallTexture = 'none' | 'brick' | 'wood-panel' | 'wallpaper' | 'tile';
 
 export interface RoomDimensions {
   length: string;
@@ -24,6 +29,8 @@ export interface SceneObject {
   roughness: number;
   wall?: WallSide;
   wallOffset?: number;
+  wallVerticalOffset?: number;
+  rotationZ?: number;
 }
 
 export type LightingMood = 'cozy' | 'bright' | 'dramatic' | 'neutral';
@@ -36,63 +43,97 @@ export const SURFACE_TO_MATERIAL: Record<Surface, { metalness: number; roughness
   glossy: { metalness: 0.7, roughness: 0.15 },
 };
 
-export const isWallItem = (type: AssetType): boolean => type === 'door' || type === 'window' || type === 'vent';
+export const isWallItem = (type: AssetType): boolean =>
+  type === 'door' || type === 'window' || type === 'vent' ||
+  type === 'painting' || type === 'mirror' || type === 'wall-shelf' || type === 'clock' || type === 'tv-mount';
 
-const FOOTPRINT_RADIUS: Record<AssetType, number> = {
-  sofa: 0.7,
-  lamp: 0.25,
-  plant: 0.35,
-  table: 0.45,
-  chair: 0.35,
-  rug: 0.6,
-  door: 0,
-  window: 0,
-  vent: 0,
+export const isDecorativeItem = (type: AssetType): boolean =>
+  type === 'painting' || type === 'mirror' || type === 'wall-shelf' || type === 'clock' || type === 'tv-mount';
+
+export const MOVE_STEP = 0.1;
+export type MoveDirection = 'left' | 'right' | 'up' | 'down';
+
+export const WALL_ITEM_HALF_WIDTH: Record<string, number> = {
+  door: 0.45,
+  window: 0.55,
+  vent: 0.175,
+  painting: 0.4,
+  mirror: 0.3,
+  'wall-shelf': 0.4,
+  clock: 0.175,
+  'tv-mount': 0.55,
 };
 
-function computeOverlaps(objects: SceneObject[]): string[] {
-  const overlapping = new Set<string>();
-  for (let i = 0; i < objects.length; i += 1) {
-    for (let j = i + 1; j < objects.length; j += 1) {
-      const a = objects[i];
-      const b = objects[j];
-      if (isWallItem(a.type) || isWallItem(b.type)) continue;
-      if (a.type === 'rug' || b.type === 'rug') continue;
-      const dx = a.position[0] - b.position[0];
-      const dz = a.position[2] - b.position[2];
-      const minDist = FOOTPRINT_RADIUS[a.type] + FOOTPRINT_RADIUS[b.type];
-      if (dx * dx + dz * dz < minDist * minDist) {
-        overlapping.add(a.id);
-        overlapping.add(b.id);
-      }
-    }
-  }
-  return Array.from(overlapping);
+export const FOOTPRINT_HALF: Record<AssetType, { rx: number; rz: number }> = {
+  sofa: { rx: 0.7, rz: 0.6 },
+  lamp: { rx: 0.25, rz: 0.25 },
+  plant: { rx: 0.35, rz: 0.35 },
+  table: { rx: 0.4, rz: 0.4 },
+  chair: { rx: 0.25, rz: 0.35 },
+  rug: { rx: 0.8, rz: 0.55 },
+  bookshelf: { rx: 0.45, rz: 0.2 },
+  'tv-stand': { rx: 0.6, rz: 0.25 },
+  cabinet: { rx: 0.4, rz: 0.25 },
+  bed: { rx: 0.7, rz: 1.0 },
+  desk: { rx: 0.5, rz: 0.28 },
+  door: { rx: 0, rz: 0 },
+  window: { rx: 0, rz: 0 },
+  vent: { rx: 0, rz: 0 },
+  painting: { rx: 0, rz: 0 },
+  mirror: { rx: 0, rz: 0 },
+  'wall-shelf': { rx: 0, rz: 0 },
+  clock: { rx: 0, rz: 0 },
+  'tv-mount': { rx: 0, rz: 0 },
+};
+
+function clampFloorPosition(x: number, z: number, rotationY: number, type: AssetType, halfLength: number, halfWidth: number): [number, number] {
+  const fp = FOOTPRINT_HALF[type] ?? { rx: 0.3, rz: 0.3 };
+  const cs = Math.abs(Math.cos(rotationY));
+  const sn = Math.abs(Math.sin(rotationY));
+  const effX = fp.rx * cs + fp.rz * sn;
+  const effZ = fp.rx * sn + fp.rz * cs;
+  const maxX = Math.max(0, halfLength - effX);
+  const maxZ = Math.max(0, halfWidth - effZ);
+  return [Math.min(maxX, Math.max(-maxX, x)), Math.min(maxZ, Math.max(-maxZ, z))];
 }
 
 interface StoreState {
   // Scene contents
   objects: SceneObject[];
   selectedId: string | null;
-  overlappingIds: string[];
+  selectedWall: WallSide | null;
   addObject: (type: AssetType) => void;
   removeObject: (id: string) => void;
   selectObject: (id: string | null) => void;
+  setSelectedWall: (wall: WallSide | null) => void;
   moveObject: (id: string, position: [number, number, number]) => void;
+  moveObjectByDelta: (id: string, dx: number, dy: number, dz: number) => void;
+  moveObjectByDirection: (id: string, dir: MoveDirection) => void;
   rotateObject: (id: string, rotationY: number) => void;
+  setObjectRotationZ: (id: string, rotationZ: number) => void;
   setObjectColor: (id: string, color: string) => void;
   setObjectSurface: (id: string, surface: Surface) => void;
   setWallSide: (id: string, wall: WallSide) => void;
   setWallOffset: (id: string, offset: number) => void;
+  moveToWall: (id: string, wall: WallSide) => void;
+  moveToFloor: (id: string) => void;
   resetLayout: () => void;
 
   // Room appearance (driven by AI or manual controls)
   wallColor: string;
   floorMaterial: FloorMaterial;
   lightingMood: LightingMood;
+  wallTexture: WallTexture;
+  ceilingVisible: boolean;
+  ceilingColor: string;
+  windowCoverings: boolean;
   setWallColor: (color: string) => void;
   setFloorMaterial: (material: FloorMaterial) => void;
   setLightingMood: (mood: LightingMood) => void;
+  setWallTexture: (texture: WallTexture) => void;
+  setCeilingVisible: (visible: boolean) => void;
+  setCeilingColor: (color: string) => void;
+  setWindowCoverings: (enabled: boolean) => void;
 
   // Shared room context for AI responses
   selectedRoom: RoomType;
@@ -126,9 +167,19 @@ export const ASSET_DEFAULT_COLORS: Record<AssetType, string> = {
   table: '#8a6b4f',
   chair: '#6b6f8a',
   rug: '#c9a06b',
+  bookshelf: '#6b4226',
+  'tv-stand': '#3a3a3a',
+  cabinet: '#7a5a3a',
+  bed: '#c9b8a8',
+  desk: '#8a7560',
   door: '#8a6b4f',
   window: '#9db8c4',
   vent: '#b9b9b9',
+  painting: '#d4a574',
+  mirror: '#c0d8e8',
+  'wall-shelf': '#8a6b4f',
+  clock: '#4a4a4a',
+  'tv-mount': '#1a1a1a',
 };
 
 export const ROOM_PRESETS: Record<RoomType, { length: number; width: number; height: number }> = {
@@ -155,38 +206,52 @@ export const useStore = create<StoreState>()(
     (set) => ({
       objects: STARTER_LAYOUT,
       selectedId: null,
-      overlappingIds: computeOverlaps(STARTER_LAYOUT),
+      selectedWall: 'back',
 
       addObject: (type) =>
         set((state) => {
           const id = `obj-${idCounter++}`;
           if (isWallItem(type)) {
+            let wall = state.selectedWall;
+            if (!wall && state.selectedId) {
+              const sel = state.objects.find((o) => o.id === state.selectedId);
+              if (sel?.wall) wall = sel.wall;
+            }
+            wall = wall ?? 'back';
             const newObj: SceneObject = {
               id,
               type,
               position: [0, 0, 0],
               rotationY: 0,
-              wall: 'back',
+              wall,
               wallOffset: 0,
               color: ASSET_DEFAULT_COLORS[type],
               metalness: 0,
               roughness: 1,
             };
             const objects = [...state.objects, newObj];
-            return { objects, selectedId: id, overlappingIds: computeOverlaps(objects) };
+            return { objects, selectedId: id, selectedWall: null };
           }
           const preset = ROOM_PRESETS[state.selectedRoom];
+          const [x, z] = clampFloorPosition(
+            Math.random() * (preset.length - 1.6) - (preset.length - 1.6) / 2,
+            Math.random() * (preset.width - 1.6) - (preset.width - 1.6) / 2,
+            0,
+            type,
+            preset.length / 2,
+            preset.width / 2,
+          );
           const newObj: SceneObject = {
             id,
             type,
-            position: [Math.random() * (preset.length - 1.6) - (preset.length - 1.6) / 2, 0, Math.random() * (preset.width - 1.6) - (preset.width - 1.6) / 2],
+            position: [x, 0, z],
             rotationY: 0,
             color: ASSET_DEFAULT_COLORS[type],
             metalness: 0,
             roughness: 1,
           };
           const objects = [...state.objects, newObj];
-          return { objects, selectedId: id, overlappingIds: computeOverlaps(objects) };
+          return { objects, selectedId: id, selectedWall: null };
         }),
 
       removeObject: (id) =>
@@ -195,21 +260,99 @@ export const useStore = create<StoreState>()(
           return {
             objects,
             selectedId: state.selectedId === id ? null : state.selectedId,
-            overlappingIds: computeOverlaps(objects),
           };
         }),
 
-      selectObject: (id) => set({ selectedId: id }),
+      selectObject: (id) => set({ selectedId: id, selectedWall: null }),
+
+      setSelectedWall: (wall) =>
+        set((state) => (wall ? { selectedWall: wall, selectedId: null } : { selectedWall: null })),
 
       moveObject: (id, position) =>
         set((state) => {
+          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
+          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
+          const obj = state.objects.find((o) => o.id === id);
+          if (obj && !isWallItem(obj.type)) {
+            const [x, z] = clampFloorPosition(position[0], position[2], obj.rotationY, obj.type, length / 2, width / 2);
+            position = [x, 0, z];
+          }
           const objects = state.objects.map((o) => (o.id === id ? { ...o, position } : o));
-          return { objects, overlappingIds: computeOverlaps(objects) };
+          return { objects };
+        }),
+
+      moveObjectByDelta: (id, dx, dy, dz) =>
+        set((state) => {
+          const obj = state.objects.find((o) => o.id === id);
+          if (!obj) return state;
+          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
+          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
+          const height = Math.max(2, Number.parseFloat(state.roomDimensions.height) || 3);
+          const halfLength = length / 2;
+          const halfWidth = width / 2;
+
+          if (isWallItem(obj.type)) {
+            const wall = obj.wall ?? 'back';
+            const prevH = obj.wallOffset ?? 0;
+            const prevV = obj.wallVerticalOffset ?? 0;
+            const wallLen = (wall === 'left' || wall === 'right') ? halfWidth : halfLength;
+            const margin = WALL_ITEM_HALF_WIDTH[obj.type] ?? 0;
+            const maxH = wallLen - margin;
+            const hDelta = (wall === 'left' || wall === 'right') ? dz : dx;
+            const nextH = Math.min(maxH, Math.max(-maxH, prevH + hDelta));
+            const nextV = Math.min(1.0, Math.max(-1.0, prevV + dy));
+            const objects = state.objects.map((o) => (o.id === id ? { ...o, wallOffset: nextH, wallVerticalOffset: nextV } : o));
+            return { objects };
+          }
+
+          const prevX = obj.position[0];
+          const prevZ = obj.position[2];
+          const [nextX, nextZ] = clampFloorPosition(prevX + dx, prevZ + dz, obj.rotationY, obj.type, halfLength, halfWidth);
+          const objects = state.objects.map((o) => (o.id === id ? { ...o, position: [nextX, 0, nextZ] as [number, number, number] } : o));
+          return { objects };
+        }),
+
+      moveObjectByDirection: (id, dir) =>
+        set((state) => {
+          const obj = state.objects.find((o) => o.id === id);
+          if (!obj) return state;
+          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
+          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
+          const halfLength = length / 2;
+          const halfWidth = width / 2;
+
+          if (isWallItem(obj.type)) {
+            const wall = obj.wall ?? 'back';
+            const prevH = obj.wallOffset ?? 0;
+            const prevV = obj.wallVerticalOffset ?? 0;
+            const wallLen = (wall === 'left' || wall === 'right') ? halfWidth : halfLength;
+            const margin = WALL_ITEM_HALF_WIDTH[obj.type] ?? 0;
+            const maxH = Math.max(0, wallLen - margin);
+            const hDelta = dir === 'left' ? -MOVE_STEP : dir === 'right' ? MOVE_STEP : 0;
+            const vDelta = dir === 'up' ? MOVE_STEP : dir === 'down' ? -MOVE_STEP : 0;
+            const nextH = Math.min(maxH, Math.max(-maxH, prevH + hDelta));
+            const nextV = Math.min(1.0, Math.max(-1.0, prevV + vDelta));
+            const objects = state.objects.map((o) => (o.id === id ? { ...o, wallOffset: nextH, wallVerticalOffset: nextV } : o));
+            return { objects };
+          }
+
+          const prevX = obj.position[0];
+          const prevZ = obj.position[2];
+          const dx = dir === 'left' ? -MOVE_STEP : dir === 'right' ? MOVE_STEP : 0;
+          const dz = dir === 'up' ? -MOVE_STEP : dir === 'down' ? MOVE_STEP : 0;
+          const [nextX, nextZ] = clampFloorPosition(prevX + dx, prevZ + dz, obj.rotationY, obj.type, halfLength, halfWidth);
+          const objects = state.objects.map((o) => (o.id === id ? { ...o, position: [nextX, 0, nextZ] as [number, number, number] } : o));
+          return { objects };
         }),
 
       rotateObject: (id, rotationY) =>
         set((state) => ({
           objects: state.objects.map((o) => (o.id === id ? { ...o, rotationY } : o)),
+        })),
+
+      setObjectRotationZ: (id, rotationZ) =>
+        set((state) => ({
+          objects: state.objects.map((o) => (o.id === id ? { ...o, rotationZ } : o)),
         })),
 
       setObjectColor: (id, color) =>
@@ -234,17 +377,59 @@ export const useStore = create<StoreState>()(
           objects: state.objects.map((o) => (o.id === id ? { ...o, wallOffset: offset } : o)),
         })),
 
+      moveToWall: (id, wall) =>
+        set((state) => {
+          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
+          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
+          const halfLength = length / 2;
+          const halfWidth = width / 2;
+          const objects = state.objects.map((o) => {
+            if (o.id !== id) return o;
+            return {
+              ...o,
+              wall,
+              wallOffset: 0,
+              wallVerticalOffset: 0,
+              position: [0, 0, 0] as [number, number, number],
+            };
+          });
+          return { objects };
+        }),
+
+      moveToFloor: (id) =>
+        set((state) => {
+          const objects = state.objects.map((o) => {
+            if (o.id !== id) return o;
+            return {
+              ...o,
+              wall: undefined,
+              wallOffset: undefined,
+              wallVerticalOffset: undefined,
+              position: [0, 0, 0] as [number, number, number],
+            };
+          });
+          return { objects };
+        }),
+
       resetLayout: () => {
         const objects = STARTER_LAYOUT.map((object) => ({ ...object, position: [...object.position] as SceneObject['position'] }));
-        return set({ objects, overlappingIds: computeOverlaps(objects), selectedId: null });
+        return set({ objects, selectedId: null });
       },
 
       wallColor: '#e8e1d5',
       floorMaterial: 'wood',
       lightingMood: 'neutral',
+      wallTexture: 'none',
+      ceilingVisible: true,
+      ceilingColor: '#f5f5f5',
+      windowCoverings: false,
       setWallColor: (color) => set({ wallColor: color }),
       setFloorMaterial: (material) => set({ floorMaterial: material }),
       setLightingMood: (mood) => set({ lightingMood: mood }),
+      setWallTexture: (texture) => set({ wallTexture: texture }),
+      setCeilingVisible: (visible) => set({ ceilingVisible: visible }),
+      setCeilingColor: (color) => set({ ceilingColor: color }),
+      setWindowCoverings: (enabled) => set({ windowCoverings: enabled }),
 
       selectedRoom: 'room',
       setSelectedRoom: (room) =>
@@ -287,7 +472,6 @@ export const useStore = create<StoreState>()(
     {
       partialize: (state) => ({
         objects: state.objects,
-        overlappingIds: state.overlappingIds,
       }),
       equality: (past, current) => past.objects === current.objects,
       limit: 30,
@@ -325,7 +509,6 @@ export function importDesign(json: string): void {
     useStore.setState({
       projectName: typeof data.projectName === 'string' ? data.projectName : 'My Design',
       objects: objects as SceneObject[],
-      overlappingIds: computeOverlaps(objects as SceneObject[]),
       selectedId: null,
       wallColor: typeof data.wallColor === 'string' ? data.wallColor : '#e8e1d5',
       floorMaterial: floors.includes(data.floorMaterial as FloorMaterial) ? (data.floorMaterial as FloorMaterial) : 'wood',

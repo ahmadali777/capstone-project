@@ -6,7 +6,9 @@ https://capstone-project-three-silk-20.vercel.app
 
 **Repository:** [github.com/ahmadali777/capstone-project](https://github.com/ahmadali777/capstone-project)
 
-SpatialStager AI is a browser-based interior-design playground. Users can place and reposition furniture in a 3D room, adjust materials and lighting, upload a room photo for a quick style suggestion, and ask an AI design assistant for tailored advice. Designs remain in the browser and can be exported as JSON or a PNG image.
+SpatialStager AI is a browser-based interior-design playground. Users select furniture and move it with arrow keys (or an on-screen D-pad on mobile), arrange floor pieces and wall-mounted items across all four editable walls, adjust materials and lighting, upload a room photo for a quick style suggestion, and ask an AI design assistant for tailored advice. Designs remain in the browser and can be exported as JSON or a PNG image.
+
+Built for design students, freelance interior designers, and homeowners who want to prototype room layouts without installing heavyweight CAD software.
 
 ## Screenshots
 
@@ -19,15 +21,26 @@ The desktop and mobile views below were captured from the local application. Kee
 ## What it does
 
 - Creates an interactive 3D room with orbit controls and a client-only Three.js canvas.
-- Adds, selects, rotates, recolours, and drags floor furniture (sofa, chair, table, lamp, plant, and rug).
-- Adds wall-mounted doors, windows, and vents, with placement on the back or left wall.
-- Highlights colliding floor furniture and shows a warning instead of blocking the layout; rugs are excluded from collision checks.
-- Adjusts wall colour, floor finish, lighting, room dimensions, and furniture finishes.
-- Supports undo/redo for layout changes.
+- Selects items by clicking, then moves them with arrow keys (or the on-screen D-pad on mobile): floor items move left/right/forward/back, wall items move along the wall and up/down. Only one item or wall is selected at a time.
+- Shows all four walls in the same color (back, left, right, and a translucent front view wall). Click a wall to select it; wall items are placed on the currently selected wall.
+- Adds floor furniture (sofa, chair, table, lamp, plant, rug, bookshelf, TV stand, cabinet, bed, desk) and wall items — doors, windows, vents, paintings, mirrors, shelves, clocks, and TV mounts — that snap to the selected wall.
+- Places items freely: no overlap blocking or collision warnings, and arrow-key movement always works, so layouts can be arranged by eye. Room walls still act as a boundary.
+- Rotates items to suit their placement: floor items spin 90° on the floor, wall items flip between vertical and horizontal orientation.
+- Deletes the selected item from the bottom toolbar or the `Delete`/`Backspace` key.
+- Supports undo/redo for layout changes (`Ctrl+Z` / `Ctrl+Y`).
+- Adjusts wall color, floor finish, lighting, room dimensions, and furniture color/finish.
 - Saves the current design to `localStorage`, exports/imports layout JSON, and downloads a PNG screenshot of the canvas.
 - Accepts a room photo and returns a demo style suggestion that can be applied to the scene.
 - Streams AI-powered interior-design advice through the chat panel when a Groq or OpenRouter key is configured.
 - Falls back to a static SVG room preview for WebGL-unavailable, low-power, or reduced-motion environments.
+
+## Usage examples
+
+**Stage a living room layout:** Select "Living Room" from the room type picker, set dimensions to 14 × 12 ft, and add a sofa and two chairs. Use the arrow keys to place them wherever you like — items can sit right next to each other with nothing blocking the move. Rotate the sofa to face the back wall and change the wall color to warm beige. Select a wall to add doors, windows, or decorative pieces on that wall. Press undo if a placement does not feel right. Export the final layout as JSON to revisit later, or download a PNG screenshot to share with a client.
+
+**Ask the AI assistant for design advice:** Open the chat panel and ask something like "How should I arrange furniture in a 10 × 10 ft bedroom?" The assistant streams a response referencing the current room type, dimensions, and existing furniture. Apply the suggested lighting mood directly from the response.
+
+**Get a quick style suggestion from a photo:** Upload a photo of an existing room. The tool analyses it and returns mood tags, a wall colour, a floor material, and a furniture list. Click "Apply" to push those suggestions into the 3D scene and see the room update instantly.
 
 ## Tech stack
 
@@ -104,7 +117,7 @@ Browser
 │   ├── Scene: lazy-loaded React Three Fiber room and furniture
 │   └── ChatPanel: streamed conversation UI
 ├── Zustand store
-│   ├── scene state, collision checks, undo/redo
+│   ├── scene state, item placement and movement, undo/redo
 │   └── localStorage autosave/restore
 └── Next.js route handlers
     ├── POST /api/analyze-room → deterministic demo style suggestion
@@ -113,12 +126,48 @@ Browser
 
 The 3D scene is dynamically imported with server-side rendering disabled because WebGL requires the browser. Scene state is intentionally client-local: there are no accounts, databases, or server-side saved designs in this version. API keys are read only in the server route handler, so the browser never receives them.
 
+## V2 evaluation results
+
+### Automated tests
+
+| Suite | Framework | Tests | Status |
+| --- | --- | --- | --- |
+| Unit / component | Vitest + Testing Library | 74 | All passing |
+| End-to-end | Playwright (Chromium) | 1 | Passing |
+
+Unit tests cover the chat panel (message sending, streaming, stop, error banners, rate limiting, offline state), message bubbles (text, reasoning, tool cards, file links), tool cards (structured output, failure, busy, streaming states), the settings form (validation, save, reset, disabled state), and the scene store — adding, moving, rotating, and deleting floor and wall items across all four walls (back, left, right, front), boundary clamping, wall-placement on the selected wall, and export/import round-trips.
+
+### Accessibility and performance audit
+
+Tested with WAVE and Lighthouse on 17 August 2026.
+
+| Metric | Score |
+| --- | --- |
+| WAVE accessibility | 10 / 10 |
+| Lighthouse accessibility | 100 |
+| Lighthouse best practices | 100 |
+| Lighthouse performance | 80 |
+| Lighthouse SEO | 60 |
+
+Zero WAVE errors, zero contrast errors, zero alerts. The main area for improvement is SEO (score 60), which is expected for a client-rendered SPA without server-side meta tag generation.
+
+## Limitations
+
+- **Mock photo analysis (v1):** The `/api/analyze-room` route returns a random style suggestion from a fixed set. A real OpenAI GPT-4o Vision implementation exists as a commented-out reference but is not active.
+- **Two-message chat rate limit:** The client-side rate limiter allows only 2 messages per session (resets on page refresh). This is intentionally restrictive to keep demo costs near zero.
+- **No server-side persistence:** All design state lives in `localStorage`. There are no user accounts, databases, or cloud-saved designs.
+- **Single-turn AI chat:** Only the latest user message is sent to the provider; there is no conversation history. Room context is re-attached to every request.
+- **Simple 3D geometry:** Only the sofa uses a GLB model (with a procedural fallback). All other furniture items are basic Three.js primitives (boxes, cylinders, spheres).
+- **Low SEO score:** Lighthouse SEO scored 60 because the app is a client-rendered SPA without server-side meta tag generation.
+- **Button `disabled` accessibility gap:** The send button uses the native `disabled` attribute, which removes it from the tab order. The WAI-ARIA APG recommends `aria-disabled` plus a guarded no-op for controls that should remain keyboard-discoverable.
+
 ## Product and engineering decisions
 
 - **Interactive 3D instead of generated images:** staging objects in a scene lets users experiment with placement, collisions, materials, and lighting rather than receiving a single static output.
 - **Progressive enhancement for rendering:** the application preserves the core room experience with an SVG fallback when WebGL or motion-heavy rendering is unsuitable.
 - **Local-first saving:** `localStorage` and JSON import/export keep the first version simple, private, and usable without sign-in or backend infrastructure.
-- **Soft collision feedback:** a warning is more useful for exploratory staging than a hard placement restriction; designers can deliberately overlap items while experimenting.
+- **Free placement instead of collision rules:** overlap checks were removed so users can arrange items by eye; the room walls still act as a boundary, so nothing can be moved outside the room.
+- **Keyboard-first interaction:** selecting with a click and moving with arrow keys (plus an on-screen D-pad on mobile) gives precise, predictable control and works for floor and wall items alike.
 - **Provider fallback for chat:** the route prefers Groq when available and otherwise uses OpenRouter, reducing coupling to one AI service.
 - **Mock image analysis in v1:** photo analysis returns sample style suggestions, allowing a complete demo without requiring image-model credits. The route contains a documented OpenAI implementation path for a future live version.
 
@@ -135,18 +184,24 @@ Before publishing publicly, complete this production checklist:
 - [ ] Set a sensible `maxDuration` on the streaming route for the chosen Vercel plan.
 - [ ] Test the full flow in Chrome, Firefox, Safari, and mobile Safari.
 
-**Current limitation:** the chat handler caps provider output (`600` tokens) and only sends the latest user message, but it does. implement an application-level rate limit, input-size cap, or `maxDuration`.
-
 ## How AI tools contributed
 
-AI tools were used as a development collaborator, not as an unattended code generator. They helped with:
+This project was built with Claude (Anthropic) as a development collaborator. Here is what AI handled and what I verified myself.
 
-- breaking down the capstone scope into the 3D staging, persistence, chat, accessibility, and testable UI pieces;
-- drafting and refining React/TypeScript patterns for scene controls, Zustand state transitions, and streamed chat handling;
-- suggesting test cases and accessibility improvements, with the resulting work checked through Vitest and Playwright;
-- reviewing and improving documentation language, including this README.
+**What AI helped with:**
+- Scaffolding the Next.js project structure, route handlers, and component hierarchy
+- Drafting React Three Fiber scene setup, item selection/movement logic, and Zustand state transitions
+- Writing the Vercel AI SDK streaming integration for the chat panel
+- Generating the initial test suite (Vitest + Playwright), which I then expanded and corrected
+- Suggesting accessibility improvements (ARIA roles, live regions, keyboard behaviour)
 
-All project-specific implementation choices—such as the local-first design model, collision behaviour, WebGL fallback, API provider order, and final code integration—were reviewed and made by the project author. AI output was treated as a starting point and verified in the application.
+**What I checked and decided myself:**
+- All final implementation choices: local-first design, collision behaviour, WebGL fallback, provider fallback order, and rate-limit values
+- Test coverage gaps: I added tests for edge cases AI missed (offline state, rate-limit exhaustion, stop-button stream interruption)
+- The accessibility audit (WAVE + Lighthouse) and manual keyboard navigation testing
+- Documentation language, architecture decisions, and this transparency statement
+
+AI output was treated as a starting point. Every AI-generated line was reviewed, tested, and modified before shipping.
 
 Built by:
 Muhammad Ahmad Ali
