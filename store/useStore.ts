@@ -191,6 +191,15 @@ export const ROOM_PRESETS: Record<RoomType, { length: number; width: number; hei
 
 let idCounter = 0;
 
+function nextObjectId(objects: SceneObject[]): string {
+  const used = new Set(objects.map((o) => o.id));
+  let id = `obj-${idCounter++}`;
+  while (used.has(id)) {
+    id = `obj-${idCounter++}`;
+  }
+  return id;
+}
+
 const STARTER_LAYOUT: SceneObject[] = [
   { id: 'starter-sofa', type: 'sofa', position: [-0.75, 0, -0.75], rotationY: 0, color: '#a3785c', metalness: 0, roughness: 1 },
   { id: 'starter-rug', type: 'rug', position: [0, 0, 0.45], rotationY: 0, color: '#c9a06b', metalness: 0, roughness: 1 },
@@ -210,7 +219,7 @@ export const useStore = create<StoreState>()(
 
       addObject: (type) =>
         set((state) => {
-          const id = `obj-${idCounter++}`;
+          const id = nextObjectId(state.objects);
           if (isWallItem(type)) {
             let wall = state.selectedWall;
             if (!wall && state.selectedId) {
@@ -506,9 +515,25 @@ export function importDesign(json: string): void {
     const floors: FloorMaterial[] = ['wood', 'tile', 'carpet'];
     const moods: LightingMood[] = ['cozy', 'bright', 'dramatic', 'neutral'];
 
+    const imported = objects as SceneObject[];
+    idCounter = imported.reduce((max, o) => {
+      const match = /^obj-(\d+)$/.exec(o.id ?? '');
+      return match ? Math.max(max, Number(match[1]) + 1) : max;
+    }, idCounter);
+    const seenIds = new Set<string>();
+    const dedupedObjects: SceneObject[] = [];
+    for (const o of imported) {
+      if (seenIds.has(o.id)) {
+        dedupedObjects.push({ ...o, id: nextObjectId(dedupedObjects) });
+      } else {
+        seenIds.add(o.id);
+        dedupedObjects.push(o);
+      }
+    }
+
     useStore.setState({
       projectName: typeof data.projectName === 'string' ? data.projectName : 'My Design',
-      objects: objects as SceneObject[],
+      objects: dedupedObjects,
       selectedId: null,
       wallColor: typeof data.wallColor === 'string' ? data.wallColor : '#e8e1d5',
       floorMaterial: floors.includes(data.floorMaterial as FloorMaterial) ? (data.floorMaterial as FloorMaterial) : 'wood',

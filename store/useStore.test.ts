@@ -53,6 +53,51 @@ describe('helpers', () => {
   });
 });
 
+describe('object id uniqueness across restores', () => {
+  it('does not re-use restored wall item ids when adding a floor item', () => {
+    // The app auto-restores the saved design on load while the fresh-session
+    // id counter starts at 0. Without syncing, a restored vent (obj-0) shares
+    // its id with the next floor item added (obj-0), making movement move the
+    // wall item instead of the floor item.
+    importDesign(
+      JSON.stringify({
+        objects: [
+          { id: 'obj-0', type: 'vent', position: [0, 0, 0], rotationY: 0, color: '#b9b9b9', metalness: 0, roughness: 1, wall: 'back', wallOffset: 0, wallVerticalOffset: 0 },
+        ],
+      }),
+    );
+    const ventId = useStore.getState().objects[0].id;
+    const ventStartOffset = useStore.getState().objects[0].wallOffset;
+
+    const floor = addOfType('sofa');
+
+    expect(floor.id).not.toBe(ventId);
+    expect(new Set(useStore.getState().objects.map((o) => o.id)).size).toBe(useStore.getState().objects.length);
+
+    const floorStartX = floor.position[0];
+    useStore.getState().moveObjectByDirection(floor.id, 'right');
+
+    const after = useStore.getState();
+    const movedFloor = after.objects.find((o) => o.id === floor.id)!;
+    const ventAfter = after.objects.find((o) => o.id === ventId)!;
+    expect(movedFloor.position[0]).toBeCloseTo(floorStartX + MOVE_STEP);
+    expect(ventAfter.wallOffset).toBe(ventStartOffset);
+  });
+
+  it('renumbers duplicate ids in stored designs so selection stays unambiguous', () => {
+    importDesign(
+      JSON.stringify({
+        objects: [
+          { id: 'obj-0', type: 'vent', position: [0, 0, 0], rotationY: 0, color: '#b9b9b9', metalness: 0, roughness: 1, wall: 'back', wallOffset: 0, wallVerticalOffset: 0 },
+          { id: 'obj-0', type: 'window', position: [0, 0, 0], rotationY: 0, color: '#9db8c4', metalness: 0, roughness: 1, wall: 'back', wallOffset: 0, wallVerticalOffset: 0 },
+        ],
+      }),
+    );
+    const ids = useStore.getState().objects.map((o) => o.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
 describe('addObject — floor items', () => {
   it('adds a floor item and auto-selects it', () => {
     const sofa = addOfType('sofa');
