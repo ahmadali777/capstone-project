@@ -22,9 +22,9 @@ export interface RoomDimensions {
 // 1 world unit == 1 real-world foot.
 export function roomDims(roomDimensions: Pick<RoomDimensions, 'length' | 'width' | 'height'>): { length: number; width: number; height: number } {
   return {
-    length: Math.max(2, Number.parseFloat(roomDimensions.length) || 12),
-    width: Math.max(2, Number.parseFloat(roomDimensions.width) || 14),
-    height: Math.max(2, Number.parseFloat(roomDimensions.height) || 13),
+    length: Math.max(2, Number.parseFloat(roomDimensions.length) || 15),
+    width: Math.max(2, Number.parseFloat(roomDimensions.width) || 15),
+    height: Math.max(2, Number.parseFloat(roomDimensions.height) || 12),
   };
 }
 
@@ -192,7 +192,7 @@ export const ASSET_DEFAULT_COLORS: Record<AssetType, string> = {
 };
 
 export const ROOM_PRESETS: Record<RoomType, { length: number; width: number; height: number }> = {
-  room: { length: 12, width: 14, height: 13 },
+  room: { length: 15, width: 15, height: 12 },
   'living-room': { length: 14, width: 12, height: 10 },
   washroom: { length: 8, width: 6, height: 8 },
   kitchen: { length: 12, width: 10, height: 9 },
@@ -548,7 +548,7 @@ export function importDesign(json: string): void {
       roomDimensions: {
         length: '15',
         width: '15',
-        height: '10',
+        height: '12',
         unit: 'ft',
         ...(data.roomDimensions && typeof data.roomDimensions === 'object' ? (data.roomDimensions as Partial<RoomDimensions>) : {}),
       },
