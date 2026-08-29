@@ -21,7 +21,7 @@ function SofaGlb({ color, metalness, roughness }: { color: string; metalness: nu
   const copy = useMemo(() => scene.clone(true), [scene]);
   const bounds = useMemo(() => new THREE.Box3().setFromObject(copy), [copy]);
   const size = useMemo(() => bounds.getSize(new THREE.Vector3()), [bounds]);
-  const scale = useMemo(() => 1.2 / Math.max(size.x, size.z, 0.001), [size]);
+  const scale = useMemo(() => 6.8 / Math.max(size.x, size.z, 0.001), [size]);
 
   copy.traverse((child) => {
     if ((child as THREE.Mesh).isMesh) {
@@ -49,20 +49,28 @@ function SofaGlb({ color, metalness, roughness }: { color: string; metalness: nu
 function ProceduralSofa({ color, metalness, roughness }: { color: string; metalness: number; roughness: number }) {
   return (
     <group>
-      <mesh position={[0, 0.25, 0]} castShadow>
-        <boxGeometry args={[1.4, 0.5, 0.6]} />
+      <mesh position={[0, 0.5, 0]} castShadow>
+        <boxGeometry args={[7.0, 0.6, 3.8]} />
         <meshStandardMaterial color={color} metalness={metalness} roughness={roughness} />
       </mesh>
-      <mesh position={[0, 0.55, -0.25]} castShadow>
-        <boxGeometry args={[1.4, 0.5, 0.15]} />
+      <mesh position={[0, 1.15, -1.85]} castShadow>
+        <boxGeometry args={[7.0, 0.95, 0.6]} />
         <meshStandardMaterial color={color} metalness={metalness} roughness={roughness} />
       </mesh>
-      <mesh position={[-0.6, 0.4, 0.05]} castShadow>
-        <boxGeometry args={[0.2, 0.6, 0.7]} />
+      <mesh position={[-3.12, 0.75, 0]} castShadow>
+        <boxGeometry args={[0.75, 1.4, 4.2]} />
         <meshStandardMaterial color={color} metalness={metalness} roughness={roughness} />
       </mesh>
-      <mesh position={[0.6, 0.4, 0.05]} castShadow>
-        <boxGeometry args={[0.2, 0.6, 0.7]} />
+      <mesh position={[3.12, 0.75, 0]} castShadow>
+        <boxGeometry args={[0.75, 1.4, 4.2]} />
+        <meshStandardMaterial color={color} metalness={metalness} roughness={roughness} />
+      </mesh>
+      <mesh position={[-1.7, 1.12, -0.3]}>
+        <boxGeometry args={[3.15, 0.32, 3.1]} />
+        <meshStandardMaterial color={color} metalness={metalness} roughness={roughness} />
+      </mesh>
+      <mesh position={[1.7, 1.12, -0.3]}>
+        <boxGeometry args={[3.15, 0.32, 3.1]} />
         <meshStandardMaterial color={color} metalness={metalness} roughness={roughness} />
       </mesh>
     </group>

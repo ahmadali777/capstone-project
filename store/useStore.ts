@@ -19,6 +19,15 @@ export interface RoomDimensions {
   unit: string;
 }
 
+// 1 world unit == 1 real-world foot.
+export function roomDims(roomDimensions: Pick<RoomDimensions, 'length' | 'width' | 'height'>): { length: number; width: number; height: number } {
+  return {
+    length: Math.max(2, Number.parseFloat(roomDimensions.length) || 12),
+    width: Math.max(2, Number.parseFloat(roomDimensions.width) || 14),
+    height: Math.max(2, Number.parseFloat(roomDimensions.height) || 13),
+  };
+}
+
 export interface SceneObject {
   id: string;
   type: AssetType;
@@ -54,28 +63,28 @@ export const MOVE_STEP = 0.1;
 export type MoveDirection = 'left' | 'right' | 'up' | 'down';
 
 export const WALL_ITEM_HALF_WIDTH: Record<string, number> = {
-  door: 0.45,
-  window: 0.55,
-  vent: 0.175,
-  painting: 0.4,
-  mirror: 0.3,
-  'wall-shelf': 0.4,
-  clock: 0.175,
-  'tv-mount': 0.55,
+  door: 1.5,
+  window: 2.0,
+  vent: 0.7,
+  painting: 1.5,
+  mirror: 1.25,
+  'wall-shelf': 1.75,
+  clock: 0.9,
+  'tv-mount': 2.5,
 };
 
 export const FOOTPRINT_HALF: Record<AssetType, { rx: number; rz: number }> = {
-  sofa: { rx: 0.7, rz: 0.6 },
-  lamp: { rx: 0.25, rz: 0.25 },
-  plant: { rx: 0.35, rz: 0.35 },
-  table: { rx: 0.4, rz: 0.4 },
-  chair: { rx: 0.25, rz: 0.35 },
-  rug: { rx: 0.8, rz: 0.55 },
-  bookshelf: { rx: 0.45, rz: 0.2 },
-  'tv-stand': { rx: 0.6, rz: 0.25 },
-  cabinet: { rx: 0.4, rz: 0.25 },
-  bed: { rx: 0.7, rz: 1.0 },
-  desk: { rx: 0.5, rz: 0.28 },
+  sofa: { rx: 3.5, rz: 2.5 },
+  lamp: { rx: 0.5, rz: 0.5 },
+  plant: { rx: 1.0, rz: 1.0 },
+  table: { rx: 1.5, rz: 1.5 },
+  chair: { rx: 1.0, rz: 1.0 },
+  rug: { rx: 4.0, rz: 3.0 },
+  bookshelf: { rx: 1.5, rz: 0.5 },
+  'tv-stand': { rx: 3.0, rz: 0.8 },
+  cabinet: { rx: 2.75, rz: 0.9 },
+  bed: { rx: 2.6, rz: 3.4 },
+  desk: { rx: 2.5, rz: 1.2 },
   door: { rx: 0, rz: 0 },
   window: { rx: 0, rz: 0 },
   vent: { rx: 0, rz: 0 },
@@ -183,10 +192,10 @@ export const ASSET_DEFAULT_COLORS: Record<AssetType, string> = {
 };
 
 export const ROOM_PRESETS: Record<RoomType, { length: number; width: number; height: number }> = {
-  room: { length: 5, width: 4, height: 3 },
-  'living-room': { length: 6, width: 4.5, height: 3 },
-  washroom: { length: 2.6, width: 2, height: 2.6 },
-  kitchen: { length: 4, width: 3, height: 2.8 },
+  room: { length: 12, width: 14, height: 13 },
+  'living-room': { length: 14, width: 12, height: 10 },
+  washroom: { length: 8, width: 6, height: 8 },
+  kitchen: { length: 12, width: 10, height: 9 },
 };
 
 let idCounter = 0;
@@ -201,10 +210,10 @@ function nextObjectId(objects: SceneObject[]): string {
 }
 
 const STARTER_LAYOUT: SceneObject[] = [
-  { id: 'starter-sofa', type: 'sofa', position: [-0.75, 0, -0.75], rotationY: 0, color: '#a3785c', metalness: 0, roughness: 1 },
-  { id: 'starter-rug', type: 'rug', position: [0, 0, 0.45], rotationY: 0, color: '#c9a06b', metalness: 0, roughness: 1 },
-  { id: 'starter-table', type: 'table', position: [0, 0, 0.3], rotationY: 0, color: '#8a6b4f', metalness: 0, roughness: 0.45 },
-  { id: 'starter-plant', type: 'plant', position: [1.7, 0, -1.15], rotationY: 0, color: '#3f7d4e', metalness: 0, roughness: 1 },
+  { id: 'starter-sofa', type: 'sofa', position: [0, 0, -4.2], rotationY: 0, color: '#a3785c', metalness: 0, roughness: 1 },
+  { id: 'starter-rug', type: 'rug', position: [0, 0, 0.4], rotationY: 0, color: '#c9a06b', metalness: 0, roughness: 1 },
+  { id: 'starter-table', type: 'table', position: [0.6, 0, 0.6], rotationY: 0, color: '#8a6b4f', metalness: 0, roughness: 0.45 },
+  { id: 'starter-plant', type: 'plant', position: [4.6, 0, -5.9], rotationY: 0, color: '#3f7d4e', metalness: 0, roughness: 1 },
 ];
 
 export const orbitControlsRef: { current: any } = { current: null };
@@ -241,14 +250,14 @@ export const useStore = create<StoreState>()(
             const objects = [...state.objects, newObj];
             return { objects, selectedId: id, selectedWall: null };
           }
-          const preset = ROOM_PRESETS[state.selectedRoom];
+          const dims = roomDims(state.roomDimensions);
           const [x, z] = clampFloorPosition(
-            Math.random() * (preset.length - 1.6) - (preset.length - 1.6) / 2,
-            Math.random() * (preset.width - 1.6) - (preset.width - 1.6) / 2,
+            Math.random() * (dims.length - 1.6) - (dims.length - 1.6) / 2,
+            Math.random() * (dims.width - 1.6) - (dims.width - 1.6) / 2,
             0,
             type,
-            preset.length / 2,
-            preset.width / 2,
+            dims.length / 2,
+            dims.width / 2,
           );
           const newObj: SceneObject = {
             id,
@@ -279,11 +288,10 @@ export const useStore = create<StoreState>()(
 
       moveObject: (id, position) =>
         set((state) => {
-          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
-          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
+          const dims = roomDims(state.roomDimensions);
           const obj = state.objects.find((o) => o.id === id);
           if (obj && !isWallItem(obj.type)) {
-            const [x, z] = clampFloorPosition(position[0], position[2], obj.rotationY, obj.type, length / 2, width / 2);
+            const [x, z] = clampFloorPosition(position[0], position[2], obj.rotationY, obj.type, dims.length / 2, dims.width / 2);
             position = [x, 0, z];
           }
           const objects = state.objects.map((o) => (o.id === id ? { ...o, position } : o));
@@ -294,11 +302,9 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const obj = state.objects.find((o) => o.id === id);
           if (!obj) return state;
-          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
-          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
-          const height = Math.max(2, Number.parseFloat(state.roomDimensions.height) || 3);
-          const halfLength = length / 2;
-          const halfWidth = width / 2;
+          const dims = roomDims(state.roomDimensions);
+          const halfLength = dims.length / 2;
+          const halfWidth = dims.width / 2;
 
           if (isWallItem(obj.type)) {
             const wall = obj.wall ?? 'back';
@@ -306,10 +312,11 @@ export const useStore = create<StoreState>()(
             const prevV = obj.wallVerticalOffset ?? 0;
             const wallLen = (wall === 'left' || wall === 'right') ? halfWidth : halfLength;
             const margin = WALL_ITEM_HALF_WIDTH[obj.type] ?? 0;
-            const maxH = wallLen - margin;
+            const maxH = Math.max(0, wallLen - margin);
             const hDelta = (wall === 'left' || wall === 'right') ? dz : dx;
             const nextH = Math.min(maxH, Math.max(-maxH, prevH + hDelta));
-            const nextV = Math.min(1.0, Math.max(-1.0, prevV + dy));
+            const maxV = Math.max(1, dims.height / 2 - 1);
+            const nextV = Math.min(maxV, Math.max(-maxV, prevV + dy));
             const objects = state.objects.map((o) => (o.id === id ? { ...o, wallOffset: nextH, wallVerticalOffset: nextV } : o));
             return { objects };
           }
@@ -325,10 +332,9 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const obj = state.objects.find((o) => o.id === id);
           if (!obj) return state;
-          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
-          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
-          const halfLength = length / 2;
-          const halfWidth = width / 2;
+          const dims = roomDims(state.roomDimensions);
+          const halfLength = dims.length / 2;
+          const halfWidth = dims.width / 2;
 
           if (isWallItem(obj.type)) {
             const wall = obj.wall ?? 'back';
@@ -340,7 +346,8 @@ export const useStore = create<StoreState>()(
             const hDelta = dir === 'left' ? -MOVE_STEP : dir === 'right' ? MOVE_STEP : 0;
             const vDelta = dir === 'up' ? MOVE_STEP : dir === 'down' ? -MOVE_STEP : 0;
             const nextH = Math.min(maxH, Math.max(-maxH, prevH + hDelta));
-            const nextV = Math.min(1.0, Math.max(-1.0, prevV + vDelta));
+            const maxV = Math.max(1, dims.height / 2 - 1);
+            const nextV = Math.min(maxV, Math.max(-maxV, prevV + vDelta));
             const objects = state.objects.map((o) => (o.id === id ? { ...o, wallOffset: nextH, wallVerticalOffset: nextV } : o));
             return { objects };
           }
@@ -388,10 +395,9 @@ export const useStore = create<StoreState>()(
 
       moveToWall: (id, wall) =>
         set((state) => {
-          const length = Math.max(2, Number.parseFloat(state.roomDimensions.length) || 5);
-          const width = Math.max(2, Number.parseFloat(state.roomDimensions.width) || 4);
-          const halfLength = length / 2;
-          const halfWidth = width / 2;
+          const dims = roomDims(state.roomDimensions);
+          const halfLength = dims.length / 2;
+          const halfWidth = dims.width / 2;
           const objects = state.objects.map((o) => {
             if (o.id !== id) return o;
             return {
@@ -490,7 +496,7 @@ export const useStore = create<StoreState>()(
 
 export const useTemporalStore = () => useZustandStore(useStore.temporal);
 
-const DESIGN_STORAGE_KEY = 'spatialstager-design';
+const DESIGN_STORAGE_KEY = 'spatialstager-design-v2';
 
 export function exportDesign(): string {
   const { projectName, objects, wallColor, floorMaterial, lightingMood, selectedRoom, roomDimensions } = useStore.getState();
@@ -540,9 +546,9 @@ export function importDesign(json: string): void {
       lightingMood: moods.includes(data.lightingMood as LightingMood) ? (data.lightingMood as LightingMood) : 'neutral',
       selectedRoom: rooms.includes(data.selectedRoom as RoomType) ? (data.selectedRoom as RoomType) : 'room',
       roomDimensions: {
-        length: '5',
-        width: '4',
-        height: '3',
+        length: '15',
+        width: '15',
+        height: '10',
         unit: 'ft',
         ...(data.roomDimensions && typeof data.roomDimensions === 'object' ? (data.roomDimensions as Partial<RoomDimensions>) : {}),
       },

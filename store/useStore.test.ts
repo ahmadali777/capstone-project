@@ -36,7 +36,7 @@ beforeEach(() => {
     selectedId: null,
     selectedWall: 'back',
     selectedRoom: 'room',
-    roomDimensions: { length: '5', width: '4', height: '3', unit: 'ft' },
+    roomDimensions: { length: '12', width: '14', height: '13', unit: 'ft' },
   });
 });
 
@@ -110,8 +110,8 @@ describe('addObject — floor items', () => {
     for (let i = 0; i < 20; i++) {
       const obj = addOfType('sofa');
       const fp = FOOTPRINT_HALF.sofa;
-      expect(Math.abs(obj.position[0])).toBeLessThanOrEqual(5 / 2 - fp.rx + EPS);
-      expect(Math.abs(obj.position[2])).toBeLessThanOrEqual(4 / 2 - fp.rz + EPS);
+      expect(Math.abs(obj.position[0])).toBeLessThanOrEqual(12 / 2 - fp.rx + EPS);
+      expect(Math.abs(obj.position[2])).toBeLessThanOrEqual(14 / 2 - fp.rz + EPS);
     }
   });
 
@@ -166,6 +166,9 @@ describe('moveObjectByDirection — floor movement', () => {
   it('moves a floor item left/right/up/down', () => {
     const sofa = addOfType('sofa');
     const id = sofa.id;
+    useStore.getState().moveObject(id, [0, 0, 0]);
+    sofa.position[0] = 0;
+    sofa.position[2] = 0;
 
     useStore.getState().moveObjectByDirection(id, 'right');
     let obj = resolveSelected()!;
@@ -188,8 +191,8 @@ describe('moveObjectByDirection — floor movement', () => {
     const sofa = addOfType('sofa');
     const id = sofa.id;
     const { rx, rz } = FOOTPRINT_HALF.sofa;
-    const maxX = 5 / 2 - rx;
-    const maxZ = 4 / 2 - rz;
+    const maxX = 12 / 2 - rx;
+    const maxZ = 14 / 2 - rz;
 
     for (let i = 0; i < 100; i++) useStore.getState().moveObjectByDirection(id, 'right');
     for (let i = 0; i < 100; i++) useStore.getState().moveObjectByDirection(id, 'up');
@@ -213,7 +216,7 @@ describe('moveObjectByDirection — floor movement', () => {
     for (let i = 0; i < 100; i++) useStore.getState().moveObjectByDirection(id, 'right');
     const obj = resolveSelected()!;
     const { rx, rz } = FOOTPRINT_HALF.sofa;
-    expect(obj.position[0]).toBeCloseTo(5 / 2 - rz);
+    expect(obj.position[0]).toBeCloseTo(12 / 2 - rz);
   });
 });
 
@@ -254,7 +257,7 @@ describe('moveObjectByDirection — wall items on all 4 walls', () => {
     it(`clamps horizontal movement to the ${wall} wall length`, () => {
       useStore.getState().setSelectedWall(wall);
       const id = addOfType('door').id;
-      const wallLen = wall === 'left' || wall === 'right' ? 4 / 2 : 5 / 2;
+      const wallLen = wall === 'left' || wall === 'right' ? 14 / 2 : 12 / 2;
       const margin = WALL_ITEM_HALF_WIDTH.door;
       for (let i = 0; i < 200; i++) useStore.getState().moveObjectByDirection(id, 'right');
       let obj = resolveSelected()!;
@@ -266,13 +269,14 @@ describe('moveObjectByDirection — wall items on all 4 walls', () => {
     });
   }
 
-  it('clamps vertical movement to ±1.0 on walls', () => {
+  it('clamps vertical movement to fit the wall height', () => {
     useStore.getState().setSelectedWall('back');
     const id = addOfType('window').id;
+    const maxV = Math.max(1, 13 / 2 - 1);
     for (let i = 0; i < 200; i++) useStore.getState().moveObjectByDirection(id, 'up');
-    expect(resolveSelected()!.wallVerticalOffset).toBeCloseTo(1.0);
+    expect(resolveSelected()!.wallVerticalOffset).toBeCloseTo(maxV);
     for (let i = 0; i < 400; i++) useStore.getState().moveObjectByDirection(id, 'down');
-    expect(resolveSelected()!.wallVerticalOffset).toBeCloseTo(-1.0);
+    expect(resolveSelected()!.wallVerticalOffset).toBeCloseTo(-maxV);
   });
 
   it('keeps wallOffset and wallVerticalOffset separate per item', () => {
@@ -295,7 +299,7 @@ describe('moveObjectByDirection — wall items on all 4 walls', () => {
     const id = addOfType('vent').id;
     for (let i = 0; i < 100; i++) useStore.getState().moveObjectByDirection(id, 'left');
     const obj = resolveSelected()!;
-    const wallLen = 4 / 2;
+    const wallLen = 14 / 2;
     const margin = WALL_ITEM_HALF_WIDTH.vent;
     expect(obj.wallOffset).toBeCloseTo(-(wallLen - margin));
   });
@@ -387,8 +391,8 @@ describe('moveObject — clamped floor placement', () => {
     useStore.getState().moveObject(sofa.id, [100, 0, 100]);
     const obj = resolveSelected()!;
     const { rx, rz } = FOOTPRINT_HALF.sofa;
-    expect(obj.position[0]).toBeCloseTo(5 / 2 - rx);
-    expect(obj.position[2]).toBeCloseTo(4 / 2 - rz);
+    expect(obj.position[0]).toBeCloseTo(12 / 2 - rx);
+    expect(obj.position[2]).toBeCloseTo(14 / 2 - rz);
     expect(obj.position[1]).toBe(0);
   });
 
@@ -448,7 +452,7 @@ describe('export / import design', () => {
     };
     expect(restored.objects.some((o) => o.type === 'door' && o.wall === 'left')).toBe(true);
     expect(restored.objects.some((o) => o.type === 'sofa')).toBe(true);
-    expect(restored.roomDimensions.length).toBe('5');
+    expect(restored.roomDimensions.length).toBe('12');
 
     useStore.getState().resetLayout();
     importDesign(json);

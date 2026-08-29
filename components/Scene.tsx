@@ -5,7 +5,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { AdaptiveDpr, OrbitControls } from '@react-three/drei';
 import { ScanLine, Sparkles, Undo2, Redo2, Trash2, RotateCw } from 'lucide-react';
 import * as THREE from 'three';
-import { useStore, useTemporalStore, LightingMood, FloorMaterial, WallTexture, orbitControlsRef, canvasRef, type WallSide } from '@/store/useStore';
+import { useStore, useTemporalStore, LightingMood, FloorMaterial, WallTexture, roomDims, orbitControlsRef, canvasRef, type WallSide } from '@/store/useStore';
 import FurniturePiece from './FurniturePiece';
 import SceneFallback from './SceneFallback';
 
@@ -38,11 +38,7 @@ function Room({ onWallClick }: { onWallClick?: (side: WallSide) => void }) {
   const frontRaycaster = useRef(new THREE.Raycaster());
   const ndc = useRef(new THREE.Vector2());
   const dims = useMemo(
-    () => ({
-      length: Math.max(2, Number.parseFloat(roomDimensions.length) || 5),
-      width: Math.max(2, Number.parseFloat(roomDimensions.width) || 4),
-      height: Math.max(2, Number.parseFloat(roomDimensions.height) || 3),
-    }),
+    () => roomDims({ length: roomDimensions.length, width: roomDimensions.width, height: roomDimensions.height }),
     [roomDimensions.length, roomDimensions.width, roomDimensions.height],
   );
 
@@ -200,12 +196,21 @@ function DPadBtn({ label, onDown }: { label: string; onDown: () => void }) {
 }
 
 export default function Scene() {
-  const { lightingMood, setSelectedWall, selectedWall, selectedId, moveObjectByDirection, removeObject, objects, rotateObject, setObjectRotationZ } = useStore();
+  const { lightingMood, setSelectedWall, selectedWall, selectedId, moveObjectByDirection, removeObject, objects, rotateObject, setObjectRotationZ, roomDimensions } = useStore();
   const { undo, redo, pastStates, futureStates } = useTemporalStore();
   const mood = MOOD_SETTINGS[lightingMood];
   const [autoRotate, setAutoRotate] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const controlsRef = useRef<any>(null);
+
+  const dims = useMemo(
+    () => roomDims({ length: roomDimensions.length, width: roomDimensions.width, height: roomDimensions.height }),
+    [roomDimensions.length, roomDimensions.width, roomDimensions.height],
+  );
+  const cameraDistance = useMemo(() => Math.max(dims.length, dims.width, 4) * 1.45, [dims.length, dims.width]);
+  const cameraPosition = useMemo(() => [0, dims.height * 0.5, cameraDistance] as [number, number, number], [dims.height, cameraDistance]);
+  const cameraTarget = useMemo(() => [0, dims.height * 0.38, 0] as [number, number, number], [dims.height]);
+  const maxOrbitDistance = useMemo(() => Math.max(dims.length, dims.width) * 2, [dims.length, dims.width]);
 
   useEffect(() => {
     if (controlsRef.current) orbitControlsRef.current = controlsRef.current;
@@ -273,7 +278,7 @@ export default function Scene() {
       <Canvas
         dpr={caps.lowPower ? [1, 1] : [1, 1.75]}
         gl={{ antialias: !caps.lowPower, powerPreference: 'high-performance', preserveDrawingBuffer: true }}
-        camera={{ position: [0, 2.5, 7], fov: 45 }}
+        camera={{ position: cameraPosition, fov: 45 }}
         onPointerMissed={() => useStore.getState().selectObject(null)}
         onCreated={({ gl }) => {
           canvasRef.current = gl.domElement;
@@ -292,10 +297,11 @@ export default function Scene() {
         }} />
         <OrbitControls
           ref={controlsRef}
+          target={cameraTarget}
           minPolarAngle={0.4}
           maxPolarAngle={1.3}
-          minDistance={4}
-          maxDistance={12}
+          minDistance={5}
+          maxDistance={maxOrbitDistance}
           enablePan={!caps.reducedMotion}
           enableRotate={!caps.reducedMotion}
           enableZoom={!caps.reducedMotion}
@@ -383,8 +389,8 @@ export default function Scene() {
           type="button"
           onClick={() => {
             if (controlsRef.current) {
-              controlsRef.current.object.position.set(0, 2.5, 7);
-              controlsRef.current.target.set(0, 1.5, 0);
+              controlsRef.current.object.position.set(0, dims.height * 0.5, cameraDistance);
+              controlsRef.current.target.set(0, dims.height * 0.38, 0);
               controlsRef.current.update();
             }
           }}
