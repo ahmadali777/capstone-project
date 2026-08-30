@@ -1,11 +1,56 @@
 import './globals.css';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+
+export const viewport: Viewport = {
+  themeColor: '#ffffff',
+  width: 'device-width',
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
-  title: 'SpatialStager AI',
-  description: 'AI-powered interactive 3D room staging',
+  metadataBase: new URL('https://capstone-project-three-silk-20.vercel.app'),
+  title: {
+    default: 'SpatialStager AI — AI-Assisted 3D Room Staging',
+    template: '%s | SpatialStager AI',
+  },
+  description:
+    'Design and stage 3D room layouts in your browser. Place furniture with arrow keys, adjust materials and lighting, and get AI-powered interior-design advice.',
   manifest: '/site.webmanifest',
-  themeColor: '#ffffff',
+  applicationName: 'SpatialStager AI',
+  keywords: [
+    '3D room designer',
+    'interior design',
+    'room staging',
+    'furniture layout',
+    'AI design assistant',
+    'Virtual staging',
+  ],
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    url: 'https://capstone-project-three-silk-20.vercel.app',
+    siteName: 'SpatialStager AI',
+    title: 'SpatialStager AI — AI-Assisted 3D Room Staging',
+    description:
+      'Design and stage 3D room layouts in your browser with AI-powered interior-design advice.',
+    images: [{ url: '/og-image.png', width: 1200, height: 630, alt: 'SpatialStager AI 3D room designer' }],
+    locale: 'en_US',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'SpatialStager AI — AI-Assisted 3D Room Staging',
+    description:
+      'Design and stage 3D room layouts in your browser with AI-powered interior-design advice.',
+    images: ['/og-image.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  authors: [{ name: 'Muhammad Ahmad Ali', url: 'https://ahmad-swe-portfolio.vercel.app' }],
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

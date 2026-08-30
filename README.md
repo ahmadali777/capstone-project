@@ -10,6 +10,8 @@ SpatialStager AI is a browser-based interior-design playground. Users select fur
 
 Built for design students, freelance interior designers, and homeowners who want to prototype room layouts without installing heavyweight CAD software.
 
+**Why this idea:** staging a room well is a spatial, iterative problem — layout, materials, and lighting interact, and most people try several arrangements before committing. A click-to-place 3D scene with keyboard movement and an AI advisor that can actually *change the scene* solves that better than a static before/after image, and it exercises the full stack this capstone cares about: accessible components, structured AI output, resilience to provider failures, and deliberate deployment.
+
 ## Screenshots
 
 The desktop and mobile views below were captured from the local application. Keeping the source images in the repository lets the README render on GitHub and gives reviewers an immediate view of the product.
@@ -90,11 +92,12 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000). The room designer and mock 
 ### Useful commands
 
 ```bash
-npm run dev        # local development server
-npm run build      # production build check
-npm run start      # serve a completed production build
-npm test           # unit/component tests
-npm run test:e2e   # Playwright browser tests
+npm run dev          # local development server
+npm run build        # production build check
+npm run start        # serve a completed production build
+npm test             # unit/component tests
+npm run test:coverage# unit tests + v8 coverage report
+npm run test:e2e     # Playwright browser tests
 ```
 
 ## Environment variables
@@ -126,20 +129,24 @@ Browser
 
 The 3D scene is dynamically imported with server-side rendering disabled because WebGL requires the browser. Scene state is intentionally client-local: there are no accounts, databases, or server-side saved designs in this version. API keys are read only in the server route handler, so the browser never receives them.
 
-## V2 evaluation results
+## V3 evaluation results
 
 ### Automated tests
 
 | Suite | Framework | Tests | Status |
 | --- | --- | --- | --- |
-| Unit / component | Vitest + Testing Library | 74 | All passing |
+| Unit / component | Vitest + Testing Library (jsdom) | 96 | All passing |
 | End-to-end | Playwright (Chromium) | 1 | Passing |
+| Unit coverage (testable core) | Vitest v8 | 74.9% stmts / 71.2% funcs / 77.8% lines | Above the 50% bar |
 
-Unit tests cover the chat panel (message sending, streaming, stop, error banners, rate limiting, offline state), message bubbles (text, reasoning, tool cards, file links), tool cards (structured output, failure, busy, streaming states), the settings form (validation, save, reset, disabled state), and the scene store — adding, moving, rotating, and deleting floor and wall items across all four walls (back, left, right, front), boundary clamping, wall-placement on the selected wall, and export/import round-trips.
+Full test output, the coverage report, and a note on why the WebGL scene
+renderer is covered by E2E instead of unit tests: [`docs/testing-evidence.md`](docs/testing-evidence.md).
+
+Unit tests cover the chat panel (message sending, streaming, stop, error banners, rate limiting, offline state), message bubbles (text, reasoning, tool cards, file links), tool cards (structured output, failure, busy, streaming states), the settings form (validation, save, reset, disabled state), the AI prompt builder, the scene-mood analysis tool, the markdown stripper, the chat rate limiter, and the scene store — adding, moving, rotating, and deleting floor and wall items across all four walls (back, left, right, front), boundary clamping, wall-placement on the selected wall, and export/import round-trips. The scene store places furniture with `Math.random()`, so the suite stubs that value deterministically to keep movement assertions from being flaky.
 
 ### Accessibility and performance audit
 
-Tested with WAVE and Lighthouse on 17 August 2026.
+Tested with WAVE and Lighthouse on 17 August 2026 ([docs/audit.md](docs/audit.md)).
 
 | Metric | Score |
 | --- | --- |
@@ -147,9 +154,9 @@ Tested with WAVE and Lighthouse on 17 August 2026.
 | Lighthouse accessibility | 100 |
 | Lighthouse best practices | 100 |
 | Lighthouse performance | 80 |
-| Lighthouse SEO | 60 |
+| Lighthouse SEO | 60 → full Open Graph/Twitter/robots/canonical metadata added 30 Aug 2026 (re-audit pending next deploy) |
 
-Zero WAVE errors, zero contrast errors, zero alerts. The main area for improvement is SEO (score 60), which is expected for a client-rendered SPA without server-side meta tag generation.
+Zero WAVE errors, zero contrast errors, zero alerts. The main area for improvement had been SEO (score 60), expected for a client-rendered SPA without server-side meta tag generation — the root layout now generates complete SEO + social metadata, a dedicated Open Graph image, and a canonical URL to close that gap.
 
 ## Limitations
 
@@ -158,7 +165,7 @@ Zero WAVE errors, zero contrast errors, zero alerts. The main area for improveme
 - **No server-side persistence:** All design state lives in `localStorage`. There are no user accounts, databases, or cloud-saved designs.
 - **Single-turn AI chat:** Only the latest user message is sent to the provider; there is no conversation history. Room context is re-attached to every request.
 - **Simple 3D geometry:** Only the sofa uses a GLB model (with a procedural fallback). All other furniture items are basic Three.js primitives (boxes, cylinders, spheres).
-- **Low SEO score:** Lighthouse SEO scored 60 because the app is a client-rendered SPA without server-side meta tag generation.
+- **Client-rendered SPA & SEO:** as a client-rendered app the page still leans on client JavaScript, which constrains raw Lighthouse performance; SEO was historically 60 and is now addressed with full Open Graph/Twitter/robots/canonical metadata (re-audit pending next deploy).
 - **Button `disabled` accessibility gap:** The send button uses the native `disabled` attribute, which removes it from the tab order. The WAI-ARIA APG recommends `aria-disabled` plus a guarded no-op for controls that should remain keyboard-discoverable.
 
 ## Product and engineering decisions
@@ -171,18 +178,64 @@ Zero WAVE errors, zero contrast errors, zero alerts. The main area for improveme
 - **Provider fallback for chat:** the route prefers Groq when available and otherwise uses OpenRouter, reducing coupling to one AI service.
 - **Mock image analysis in v1:** photo analysis returns sample style suggestions, allowing a complete demo without requiring image-model credits. The route contains a documented OpenAI implementation path for a future live version.
 
-## Production deployment and API safety
+## Production deployment, checklist & operations
 
-Deploy by importing the GitHub repository into Vercel. Add `GROQ_API_KEY` or `OPENROUTER_API_KEY` in **Project Settings → Environment Variables** for Production, Preview, and Development as appropriate, then redeploy. A custom domain can be connected from Vercel’s Domains settings.
+Deploy by importing the GitHub repository into Vercel. Add `GROQ_API_KEY` or
+`OPENROUTER_API_KEY` in **Project Settings → Environment Variables** for
+Production, Preview, and Development as appropriate, then redeploy. A custom
+domain can be connected from Vercel's Domains settings.
 
-Before publishing publicly, complete this production checklist:
+The deployment checklist is completed and **signed off** in
+[`docs/DEPLOYMENT_CHECKLIST.md`](docs/DEPLOYMENT_CHECKLIST.md). Summary of what is
+done vs. outstanding:
 
-- [ ] Add the Vercel production URL at the top of this README.
-- [ ] Set the required provider key in Vercel; confirm no keys appear in client-side bundles or Git history.
-- [ ] Add an IP-based rate limit to `/api/scene-chat` (for example, with Vercel KV/Upstash) and return `429` with a `Retry-After` header when exceeded.
-- [ ] Cap request size, number of messages, and message length before calling the provider.
-- [ ] Set a sensible `maxDuration` on the streaming route for the chosen Vercel plan.
-- [ ] Test the full flow in Chrome, Firefox, Safari, and mobile Safari.
+- **Done:** production build, secrets in Vercel (never reach the browser, `.env.local` git-ignored), CI on every push/PR (lint + 96 unit tests + E2E), WAVE 10/10 + Lighthouse a11y 100, provider-failure fallbacks, missing-key graceful degradation, WebGL SVG fallback, input validation, client-side chat rate limit, `maxDuration` on the streaming route, rollback path documented.
+- **Deferred / watch:** IP-based server-side rate limiting (client-only cap ships today), uptime monitoring (recovery = "redeploy from main"), and a Lighthouse re-audit for the SEO/performance gains from the 30 Aug 2026 metadata.
+
+**How it fails safely:** if the chat provider is down or out of credits the route
+catches the error, logs it, and streams a readable message; if no API key is set
+it explains how to configure one; if WebGL or motion-heavy rendering is
+unavailable the static SVG `SceneFallback` keeps the room experience usable; and
+the request handler caps body size, message count, and prompt length before
+touching the provider.
+
+**Rollback & monitoring:** the app is stateless server-side (all design state
+lives in `localStorage`, no database), so a rollback is a pure code deployment —
+select the last good deployment in the Vercel dashboard and choose *Redeploy*,
+or re-push the previous `main` commit. API-route errors are logged to Vercel
+function logs for diagnosis.
+
+## Reflection
+
+**What was hardest?** Making the AI feel intentional rather than tacked-on. It
+would have been easy to ship a chatbot that echoes the room back, but the 
+product only earns its "AI" label if it *changes the scene*. The real work was
+building the room-aware context — feeding the current room type, dimensions,
+materials, and placed furniture into the system prompt on every request, plus a
+structured "mood analysis" tool whose output can actually be applied to the 3D
+scene. The second-hardest part was the rendering boundary: the Three.js scene
+cannot run in jsdom, so unit-testing "the app" as a whole is impossible. That
+forced me to be explicit about what a unit test can prove (state and logic)
+versus what only a browser test can prove (rendering), which reshaped how I
+scoped coverage.
+
+**What would I do differently next time?** I would have introduced determinism
+sooner. Floor furniture is placed with `Math.random()`, and during final testing
+this surfaced an intermittent unit-test failure — a sofa that spawned exactly on
+the room boundary meant a one-step "move right" clamped back to the same x, so an
+assertion failed only sometimes. Stubbing `Math.random()` fixed it, but the bug
+was a symptom of not designing for testability from the start. I'd also add real
+conversation history and IP-level server rate limiting rather than relying on a
+client-side cap and single-turn prompts.
+
+**One thing that surprised me.** How much of "production readiness" is about
+proving the *negative space*: documenting how it fails safely, how to roll back,
+and which tests are *not* meaningful — not just listing what works. The
+deployment checklist turned out to be more valuable than any single feature,
+because it made explicit the trade-offs I had been making implicitly all term
+(no database, localStorage-only, single-turn AI, client-side rate limit). Writing
+it down is what turned "I shipped an app" into "I shipped an app I understand how
+to operate."
 
 ## How AI tools contributed
 
@@ -197,9 +250,9 @@ This project was built with Claude (Anthropic) as a development collaborator. He
 
 **What I checked and decided myself:**
 - All final implementation choices: local-first design, collision behaviour, WebGL fallback, provider fallback order, and rate-limit values
-- Test coverage gaps: I added tests for edge cases AI missed (offline state, rate-limit exhaustion, stop-button stream interruption)
-- The accessibility audit (WAVE + Lighthouse) and manual keyboard navigation testing
-- Documentation language, architecture decisions, and this transparency statement
+- Test coverage gaps: I added tests for edge cases AI missed (offline state, rate-limit exhaustion, stop-button stream interruption) and finalised a deterministic `Math.random()` stub so the scene-store movement suite is no longer flaky
+- The accessibility audit (WAVE + Lighthouse), manual keyboard navigation testing, and the Lighthouse SEO metadata improvements
+- The production deployment checklist, rollback plan, testing-evidence report, and this transparency statement and reflection
 
 AI output was treated as a starting point. Every AI-generated line was reviewed, tested, and modified before shipping.
 

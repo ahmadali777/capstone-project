@@ -31,6 +31,10 @@ const ALL_WALLS: WallSide[] = ['back', 'front', 'left', 'right'];
 const STRUCTURAL = ['door', 'window', 'vent'] as const;
 
 beforeEach(() => {
+  // Floor furniture is placed at a Math.random() position. Stubbing it to a
+  // fixed value keeps placement deterministic and away from the room bounds,
+  // so single-step movement assertions below are never flaky.
+  vi.spyOn(Math, 'random').mockReturnValue(0.5);
   useStore.setState({
     objects: [],
     selectedId: null,
